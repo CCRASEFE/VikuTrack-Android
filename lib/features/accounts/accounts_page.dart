@@ -1,0 +1,870 @@
+// ==========================================
+// ARCHIVO: lib/features/accounts/accounts_page.dart
+// ==========================================
+
+import 'package:flutter/material.dart';
+
+import '../../repositories/account_repository.dart';
+import '../../repositories/payment_method_repository.dart';
+import '../../models/account.dart';
+import 'payment_methods_page.dart';
+import 'inactive_accounts_page.dart';
+
+class AccountsPage extends StatefulWidget {
+  const AccountsPage({super.key});
+
+  @override
+  State<AccountsPage> createState() => _AccountsPageState();
+}
+
+class _AccountsPageState extends State<AccountsPage> {
+  final _accountRepository = AccountRepository();
+  final _paymentMethodRepository = PaymentMethodRepository();
+
+  bool _loading = true;
+  List<_AccountView> _accounts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAccounts();
+  }
+
+  Future<void> _loadAccounts() async {
+    final accounts = await _accountRepository.getActive();
+    final accountViews = <_AccountView>[];
+
+    for (final account in accounts) {
+      if (account.id == null) continue;
+
+      final methods = await _paymentMethodRepository.getByAccount(account.id!);
+      final balanceDetails = await _accountRepository.getBalanceDetails(account.id!);
+
+      accountViews.add(
+        _AccountView(
+          id: account.id!,
+          name: account.name,
+          currency: account.currency,
+          type: account.type,
+          initialBalance: balanceDetails['initial']!,
+          totalIn: balanceDetails['in']!,
+          totalOut: balanceDetails['out']!,
+          currentBalance: balanceDetails['current']!,
+          paymentMethods: methods
+              .map((method) => method['name'] as String)
+              .toList(),
+        ),
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _accounts = accountViews;
+      _loading = false;
+    });
+  }
+
+  String _formatAmount(int amountInCents, String currency) {
+    final amount = amountInCents / 100;
+    if (currency == 'USD') {
+      return '\$${amount.toStringAsFixed(2)}';
+    }
+    return 'S/ ${amount.toStringAsFixed(2)}';
+  }
+
+  Future<void> _createAccount() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return _CreateAccountDialog(
+          onCreate: ({
+            required String name,
+            required String currency,
+            required String type,
+            required int initialBalance,
+          }) async {
+            final accountId = await _accountRepository.insert(
+              Account(
+                name: name,
+                currency: currency,
+                type: type,
+                initialBalance: initialBalance,
+              ),
+            );
+
+            await _paymentMethodRepository.insert(
+              accountId: accountId,
+              name: name,
+            );
+          },
+        );
+      },
+    );
+
+    if (created == true && mounted) {
+      await _loadAccounts();
+    }
+  }
+
+  Future<void> _handleDeleteAccount(_AccountView account) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Eliminar cuenta'),
+          content: Text('¿Quieres eliminar la cuenta "${account.name}"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final hasMovements = await _accountRepository.hasMovements(account.id);
+
+    if (hasMovements) {
+      await _accountRepository.deactivate(account.id);
+
+      if (!mounted) return;
+      await _loadAccounts();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'La cuenta "${account.name}" contiene operaciones o reservas. Se ha desactivado para proteger tu historial.',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      await _accountRepository.delete(account.id);
+
+      if (!mounted) return;
+      await _loadAccounts();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cuenta "${account.name}" eliminada definitivamente.')),
+      );
+    }
+  }
+
+  Future<void> _editAccount(_AccountView account) async {
+    final currentAccount = await _accountRepository.getById(account.id);
+
+    if (currentAccount == null || !mounted) return;
+
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return _EditAccountDialog(
+          account: currentAccount,
+          onSave: ({
+            required String name,
+            required String currency,
+            required String type,
+            required int initialBalance,
+          }) async {
+            await _accountRepository.update(
+              Account(
+                id: currentAccount.id,
+                name: name,
+                currency: currency,
+                type: type,
+                initialBalance: initialBalance,
+                active: currentAccount.active,
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (updated == true && mounted) {
+      await _loadAccounts();
+    }
+  }
+
+  Widget _buildNetWorthSummary() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    int totalPEN = 0;
+    int totalUSD = 0;
+
+    for (final acc in _accounts) {
+      if (acc.currency == 'PEN') {
+        totalPEN += acc.currentBalance;
+      } else if (acc.currency == 'USD') {
+        totalUSD += acc.currentBalance;
+      }
+    }
+
+    return Card(
+      elevation: 0,
+      color: colorScheme.primaryContainer.withAlpha(isDark ? 80 : 120),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colorScheme.primary.withAlpha(isDark ? 90 : 60)),
+      ),
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.account_balance, color: colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Patrimonio Total en Cuentas',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Total Soles', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        _formatAmount(totalPEN, 'PEN'),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: totalPEN >= 0
+                              ? (isDark ? Colors.greenAccent : Colors.green.shade800)
+                              : Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(height: 36, width: 1, color: colorScheme.outlineVariant),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Total Dólares', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        _formatAmount(totalUSD, 'USD'),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: totalUSD >= 0
+                              ? (isDark ? Colors.greenAccent : Colors.green.shade800)
+                              : Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cuentas'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'inactive') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const InactiveAccountsPage(),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'inactive',
+                child: Text('Cuentas desactivadas'),
+              ),
+            ],
+          ),
+          IconButton(
+            onPressed: _createAccount,
+            icon: const Icon(Icons.add),
+            tooltip: 'Nueva cuenta',
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _buildNetWorthSummary(),
+                const SizedBox(height: 8),
+                Text(
+                  'Mis Cuentas',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_accounts.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text(
+                        'No tienes cuentas activas registradas.',
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  )
+                else
+                  ..._accounts.map((account) {
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => PaymentMethodsPage(
+                                accountId: account.id,
+                                accountName: account.name,
+                              ),
+                            ),
+                          );
+
+                          if (!mounted) return;
+                          await _loadAccounts();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: account.type == 'cash'
+                                        ? (isDark ? Colors.amber.shade900.withAlpha(100) : Colors.amber.shade100)
+                                        : (isDark ? Colors.blue.shade900.withAlpha(100) : Colors.blue.shade100),
+                                    child: Icon(
+                                      account.type == 'cash'
+                                          ? Icons.payments_outlined
+                                          : Icons.account_balance_outlined,
+                                      color: account.type == 'cash'
+                                          ? (isDark ? Colors.amber.shade200 : Colors.amber.shade900)
+                                          : (isDark ? Colors.blue.shade200 : Colors.blue.shade900),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          account.name,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${account.currency} · ${account.type == 'cash' ? 'Efectivo' : 'Banco'}',
+                                          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuButton<String>(
+                                    onSelected: (value) async {
+                                      if (value == 'edit') {
+                                        await _editAccount(account);
+                                      }
+                                      if (value == 'delete') {
+                                        await _handleDeleteAccount(account);
+                                      }
+                                    },
+                                    itemBuilder: (context) => const [
+                                      PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('Editar'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text(
+                                          'Eliminar',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Saldo Actual Disponible',
+                                        style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                      ),
+                                      Text(
+                                        _formatAmount(account.currentBalance, account.currency),
+                                        style: TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                          color: account.currentBalance >= 0
+                                              ? colorScheme.onSurface
+                                              : Colors.redAccent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant.withAlpha(120)),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Divider(height: 1, color: colorScheme.outlineVariant),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Inicial: ${_formatAmount(account.initialBalance, account.currency)}',
+                                    style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                  ),
+                                  Text(
+                                    'Entradas: +${_formatAmount(account.totalIn, account.currency)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark ? Colors.greenAccent : Colors.green.shade700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Salidas: -${_formatAmount(account.totalOut, account.currency)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark ? Colors.redAccent : Colors.red.shade700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (account.paymentMethods.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: account.paymentMethods
+                                      .map((method) => Chip(
+                                            visualDensity: VisualDensity.compact,
+                                            backgroundColor: colorScheme.surfaceContainerHighest,
+                                            side: BorderSide(color: colorScheme.outlineVariant),
+                                            padding: EdgeInsets.zero,
+                                            label: Text(
+                                              method,
+                                              style: TextStyle(fontSize: 11, color: colorScheme.onSurface),
+                                            ),
+                                          ))
+                                      .toList(),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+    );
+  }
+}
+
+class _CreateAccountDialog extends StatefulWidget {
+  final Future<void> Function({
+    required String name,
+    required String currency,
+    required String type,
+    required int initialBalance,
+  }) onCreate;
+
+  const _CreateAccountDialog({required this.onCreate});
+
+  @override
+  State<_CreateAccountDialog> createState() => _CreateAccountDialogState();
+}
+
+class _CreateAccountDialogState extends State<_CreateAccountDialog> {
+  final _nameController = TextEditingController();
+  final _balanceController = TextEditingController();
+
+  String _currency = 'PEN';
+  String _type = 'bank';
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _balanceController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+
+    final name = _nameController.text.trim();
+    final balanceText = _balanceController.text.trim();
+
+    if (name.isEmpty || balanceText.isEmpty) return;
+
+    final balance = double.tryParse(balanceText);
+    if (balance == null) return;
+
+    setState(() {
+      _saving = true;
+    });
+
+    try {
+      await widget.onCreate(
+        name: name,
+        currency: _currency,
+        type: _type,
+        initialBalance: (balance * 100).round(),
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo crear la cuenta: $error')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Nueva cuenta'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              enabled: !_saving,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Nombre',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _currency,
+              decoration: const InputDecoration(
+                labelText: 'Moneda',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'PEN', child: Text('Soles (PEN)')),
+                DropdownMenuItem(value: 'USD', child: Text('Dólares (USD)')),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _currency = value;
+                      });
+                    },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _type,
+              decoration: const InputDecoration(
+                labelText: 'Tipo',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'bank', child: Text('Banco')),
+                DropdownMenuItem(value: 'cash', child: Text('Efectivo')),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _type = value;
+                      });
+                    },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _balanceController,
+              enabled: !_saving,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Saldo inicial',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Crear'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditAccountDialog extends StatefulWidget {
+  final Account account;
+  final Future<void> Function({
+    required String name,
+    required String currency,
+    required String type,
+    required int initialBalance,
+  }) onSave;
+
+  const _EditAccountDialog({required this.account, required this.onSave});
+
+  @override
+  State<_EditAccountDialog> createState() => _EditAccountDialogState();
+}
+
+class _EditAccountDialogState extends State<_EditAccountDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _balanceController;
+  late String _currency;
+  late String _type;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.account.name);
+    _balanceController = TextEditingController(
+      text: (widget.account.initialBalance / 100).toStringAsFixed(2),
+    );
+    _currency = widget.account.currency;
+    _type = widget.account.type;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _balanceController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+
+    final name = _nameController.text.trim();
+    final balanceText = _balanceController.text.trim();
+
+    if (name.isEmpty || balanceText.isEmpty) return;
+
+    final balance = double.tryParse(balanceText);
+    if (balance == null) return;
+
+    setState(() {
+      _saving = true;
+    });
+
+    try {
+      await widget.onSave(
+        name: name,
+        currency: _currency,
+        type: _type,
+        initialBalance: (balance * 100).round(),
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo actualizar la cuenta: $error')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Editar cuenta'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              enabled: !_saving,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Nombre',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _currency,
+              decoration: const InputDecoration(
+                labelText: 'Moneda',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'PEN', child: Text('Soles (PEN)')),
+                DropdownMenuItem(value: 'USD', child: Text('Dólares (USD)')),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _currency = value;
+                      });
+                    },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _type,
+              decoration: const InputDecoration(
+                labelText: 'Tipo',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'bank', child: Text('Banco')),
+                DropdownMenuItem(value: 'cash', child: Text('Efectivo')),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _type = value;
+                      });
+                    },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _balanceController,
+              enabled: !_saving,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Saldo inicial',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AccountView {
+  final int id;
+  final String name;
+  final String currency;
+  final String type;
+  final int initialBalance;
+  final int totalIn;
+  final int totalOut;
+  final int currentBalance;
+  final List<String> paymentMethods;
+
+  const _AccountView({
+    required this.id,
+    required this.name,
+    required this.currency,
+    required this.type,
+    required this.initialBalance,
+    required this.totalIn,
+    required this.totalOut,
+    required this.currentBalance,
+    required this.paymentMethods,
+  });
+}
