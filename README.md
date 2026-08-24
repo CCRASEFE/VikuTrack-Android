@@ -2,9 +2,13 @@
 
 VikuTrack is a android app for organized your finances. Since your movements to registered your debts and your savings. I built the aplication and I haven't tried in Iphones or other systems. The aplication don't need internet connection. What I want is for this app be simple but potentially complex. That the default configration be simple but the options of configurations allowed add more options. This way the learning curve is gentle. 
 
-<div align="center">
-  <img src="https://github.com/user-attachments/assets/e85dc0f5-829b-461d-8bd0-6182f05f203e" width="305" />
-</div>
+<table>
+  <tr>
+    <td width="33%"><img src="https://github.com/user-attachments/assets/08d03e33-7fe6-4b52-aea9-8b1b096d7aa6" /></td>
+    <td width="33%"><img src="https://github.com/user-attachments/assets/7243f38f-f024-4c84-be10-0fc7bf57f97a" /></td>
+    <td width="33%"><img src="https://github.com/user-attachments/assets/78770a18-238a-4a1d-8fcf-21d8e54e1e5f" /></td>
+  </tr>
+</table>
 
 # finanzas_personales
 
