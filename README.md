@@ -11,10 +11,21 @@ VikuTrack is a android app for organized your finances. Since your movements to 
 </table>
 
 ## INSTALL
+This is a project developed in dart code with flutter and I have worked in VSCode. So, the requires for this project are:
+
+- Git
+- Flutter
+- Android Studio
+- Android SDK
+- Android SDK Command-line Tools
+- Android SDK Platform-Tools
+- Android SDK Build-Tools
+- Visual Studio Code
+
+Once you have the requirements you might clone the project, run the project in your code editor and verify that flutter is working with "flutter --version" and "flutter doctor", so that later install the dependences  with "flutter pub get". With this you have to go "flutter run" and load the aplication in your android. 
 
 ## RECOMENDATIONS FOR WORKING
-
-## STRUCTURE OF CONTENT
+Create a new branch for work in other version please and named this new branch with something related with you. The codes you can find in the carpet "lib".
 
 ## LINKS ABOUT FLUTTER DOCUMENTATION
 - [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
