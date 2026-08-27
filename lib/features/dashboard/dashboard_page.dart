@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/app_themes.dart';
 import '../../repositories/account_repository.dart';
 import '../../repositories/debt_repository.dart';
 import '../../repositories/food_budget_repository.dart';
@@ -55,8 +56,6 @@ class _DashboardPageState extends State<DashboardPage> {
   // Totales mensuales
   int _incomePEN = 0;
   int _expensePEN = 0;
-  int _incomeUSD = 0;
-  int _expenseUSD = 0;
 
   // Últimas operaciones
   List<Map<String, Object?>> _recentTransactions = [];
@@ -132,8 +131,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
       _incomePEN = monthlyTotals['incomePEN'] ?? 0;
       _expensePEN = monthlyTotals['expensePEN'] ?? 0;
-      _incomeUSD = monthlyTotals['incomeUSD'] ?? 0;
-      _expenseUSD = monthlyTotals['expenseUSD'] ?? 0;
 
       _recentTransactions = recent;
       _loading = false;
@@ -224,90 +221,105 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildAvailableCashCard() {
-    final primaryColor = Theme.of(context).colorScheme.primary;
-
-    // Dinero Libre Disponible = Total en cuentas - Dinero Reservado
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
     final freePEN = _netWorthPEN - _reservedPEN;
     final freeUSD = _netWorthUSD - _reservedUSD;
 
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            colors: [
-              primaryColor,
-              primaryColor.withAlpha(200),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: themeColors?.heroCardBorder ?? Colors.transparent),
+      ),
+      color: themeColors?.heroCardBg ?? Theme.of(context).colorScheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              children: const [
-                Icon(Icons.account_balance_wallet_outlined, color: Colors.white70, size: 20),
-                SizedBox(width: 8),
+              children: [
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: themeColors?.heroCardAccent ?? Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
                 Text(
                   'Dinero Libre Disponible',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: themeColors?.heroCardText ?? Colors.white,
                     fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Soles Libres', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(
+                        'Soles Libres',
+                        style: TextStyle(
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         _formatAmount(freePEN, 'PEN'),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: themeColors?.heroCardAccent ?? Colors.white,
                           fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
                         ),
                       ),
                       if (_reservedPEN > 0)
                         Text(
                           'Total en cuentas: ${_formatAmount(_netWorthPEN, 'PEN')}',
-                          style: const TextStyle(color: Colors.white60, fontSize: 10),
+                          style: TextStyle(
+                            color: (themeColors?.heroCardText ?? Colors.white).withAlpha(140),
+                            fontSize: 10,
+                          ),
                         ),
                     ],
                   ),
                 ),
-                Container(height: 40, width: 1, color: Colors.white30),
+                Container(height: 40, width: 1, color: Colors.white24),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Dólares Libres', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(
+                        'Dólares Libres',
+                        style: TextStyle(
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         _formatAmount(freeUSD, 'USD'),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: themeColors?.heroCardAccent ?? Colors.white,
                           fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
                         ),
                       ),
                       if (_reservedUSD > 0)
                         Text(
                           'Total en cuentas: ${_formatAmount(_netWorthUSD, 'USD')}',
-                          style: const TextStyle(color: Colors.white60, fontSize: 10),
+                          style: TextStyle(
+                            color: (themeColors?.heroCardText ?? Colors.white).withAlpha(140),
+                            fontSize: 10,
+                          ),
                         ),
                     ],
                   ),
@@ -321,54 +333,65 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildFeatureCardsRow() {
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final foodIsExceeded = _foodRemainingToday < 0;
+
     return Column(
       children: [
         Row(
           children: [
-            // Tarjeta de Reservas (Estilo pastel con alto contraste)
+            // Tarjeta de Reservas
             Expanded(
               child: Card(
                 elevation: 0,
-                color: Colors.deepPurple.shade50,
+                color: themeColors?.cardBaseBg,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Colors.deepPurple.shade200),
+                  borderRadius: BorderRadius.circular(18),
+                  side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
                 ),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(18),
                   onTap: _openReservations,
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.savings_outlined, color: Colors.deepPurple.shade800, size: 18),
+                            Icon(
+                              Icons.savings_outlined,
+                              color: themeColors?.cardAccentText,
+                              size: 18,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               'Reservas',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.deepPurple.shade900,
+                                color: themeColors?.cardAccentText,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _reservedUSD > 0
-                              ? '${_formatAmount(_reservedPEN, 'PEN')}\n${_formatAmount(_reservedUSD, 'USD')}'
-                              : _formatAmount(_reservedPEN, 'PEN'),
+                          _formatAmount(_reservedPEN, 'PEN'),
                           style: TextStyle(
-                            fontSize: _reservedUSD > 0 ? 13 : 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepPurple.shade900,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: themeColors?.cardBaseText,
                           ),
                         ),
                         const SizedBox(height: 2),
-                        const Text('Fondos apartados', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                        Text(
+                          'Fondos apartados',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -377,33 +400,37 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             const SizedBox(width: 10),
 
-            // Tarjeta de Control de Alimentación (Estilo cálido con alto contraste)
+            // Tarjeta de Comida Hoy
             Expanded(
               child: Card(
                 elevation: 0,
-                color: Colors.orange.shade50,
+                color: themeColors?.cardBaseBg,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Colors.orange.shade200),
+                  borderRadius: BorderRadius.circular(18),
+                  side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
                 ),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(18),
                   onTap: _openFoodBudget,
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.restaurant, color: Colors.orange.shade900, size: 18),
+                            Icon(
+                              Icons.restaurant,
+                              color: themeColors?.cardAccentText,
+                              size: 18,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               'Comida Hoy',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.orange.shade900,
+                                color: themeColors?.cardAccentText,
                               ),
                             ),
                           ],
@@ -413,13 +440,17 @@ class _DashboardPageState extends State<DashboardPage> {
                           _formatAmount(_foodRemainingToday.abs(), 'PEN'),
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: _foodRemainingToday < 0 ? Colors.red.shade800 : Colors.green.shade800,
+                            fontWeight: FontWeight.w800,
+                            color: foodIsExceeded ? Theme.of(context).colorScheme.error : themeColors?.cardBaseText,
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          _foodRemainingToday < 0 ? 'Excedido' : 'de ${_formatAmount(_foodLimitToday, 'PEN')}',
-                          style: const TextStyle(fontSize: 10, color: Colors.black54),
+                          foodIsExceeded ? 'Excedido' : 'de ${_formatAmount(_foodLimitToday, 'PEN')}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -431,43 +462,61 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         const SizedBox(height: 10),
 
-        // Tarjeta de Deudas y Préstamos (Estilo pastel índigo)
+        // Tarjeta de Deudas y Préstamos
         Card(
           elevation: 0,
-          color: Colors.indigo.shade50,
+          color: themeColors?.cardBaseBg,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.indigo.shade200),
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
           ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             onTap: _openDebts,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.indigo.shade100,
-                    child: Icon(Icons.handshake_outlined, color: Colors.indigo.shade900, size: 20),
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: themeColors?.pillBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.handshake_outlined,
+                      color: themeColors?.cardAccentText,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Deudas y Préstamos',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.indigo),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: themeColors?.cardBaseText,
+                          ),
                         ),
                         Text(
                           'Debo: ${_formatAmount(_debtsPendingPEN, 'PEN')}  ·  Me deben: ${_formatAmount(_owedToMePEN, 'PEN')}',
-                          style: const TextStyle(fontSize: 12, color: Colors.black87),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: Colors.indigo.shade800),
+                  Icon(
+                    Icons.chevron_right,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ],
               ),
             ),
@@ -478,31 +527,33 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildQuickActions() {
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+
     return Row(
       children: [
         Expanded(
-          child: _QuickActionButton(
+          child: _ActionBtn(
             label: 'Gasto',
             icon: Icons.arrow_upward,
-            color: Colors.redAccent,
+            themeColors: themeColors,
             onTap: () => _openCreateTransaction('expense'),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _QuickActionButton(
+          child: _ActionBtn(
             label: 'Ingreso',
             icon: Icons.arrow_downward,
-            color: Colors.green,
+            themeColors: themeColors,
             onTap: () => _openCreateTransaction('income'),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _QuickActionButton(
+          child: _ActionBtn(
             label: 'Transferir',
             icon: Icons.swap_horiz,
-            color: Colors.blueAccent,
+            themeColors: themeColors,
             onTap: () => _openCreateTransaction('transfer'),
           ),
         ),
@@ -512,12 +563,14 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildMonthlySummaryCard() {
     final netPEN = _incomePEN - _expensePEN;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
 
     return Card(
       elevation: 0,
+      color: themeColors?.summaryBg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: themeColors?.summaryBorder ?? Colors.white12),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -528,53 +581,85 @@ class _DashboardPageState extends State<DashboardPage> {
               children: [
                 IconButton(
                   onPressed: _previousMonth,
-                  icon: const Icon(Icons.chevron_left),
+                  icon: Icon(Icons.chevron_left, color: themeColors?.cardBaseText),
                   tooltip: 'Mes anterior',
                 ),
                 Text(
                   _formatMonthYear(_selectedMonth),
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: themeColors?.cardBaseText,
+                  ),
                 ),
                 IconButton(
                   onPressed: _nextMonth,
-                  icon: const Icon(Icons.chevron_right),
+                  icon: Icon(Icons.chevron_right, color: themeColors?.cardBaseText),
                   tooltip: 'Mes siguiente',
                 ),
               ],
             ),
-            const Divider(),
+            Divider(color: themeColors?.summaryBorder),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child: _SummaryBox(
-                    title: 'Ingresos',
-                    amountPEN: _incomePEN,
-                    amountUSD: _incomeUSD,
-                    color: Colors.green,
-                    icon: Icons.trending_up,
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: themeColors?.summaryBoxBg,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.trending_up, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
+                            const SizedBox(width: 6),
+                            Text('Ingresos', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(_formatAmount(_incomePEN, 'PEN'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: themeColors?.cardBaseText)),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: _SummaryBox(
-                    title: 'Gastos',
-                    amountPEN: _expensePEN,
-                    amountUSD: _expenseUSD,
-                    color: Colors.redAccent,
-                    icon: Icons.trending_down,
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: themeColors?.summaryBoxBg,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.trending_down, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
+                            const SizedBox(width: 6),
+                            Text('Gastos', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(_formatAmount(_expensePEN, 'PEN'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: themeColors?.cardBaseText)),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
 
-            // Barra verde de Ahorro del Mes
+            // Píldora de Ahorro
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               decoration: BoxDecoration(
-                color: netPEN >= 0 ? Colors.green.shade50 : Colors.red.shade50,
-                borderRadius: BorderRadius.circular(10),
+                color: themeColors?.savingsBg ?? Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -583,16 +668,16 @@ class _DashboardPageState extends State<DashboardPage> {
                     netPEN >= 0 ? 'Ahorro del Mes (Soles):' : 'Déficit del Mes (Soles):',
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: netPEN >= 0 ? Colors.green.shade900 : Colors.red.shade900,
+                      fontWeight: FontWeight.w800,
+                      color: themeColors?.savingsText ?? Colors.black,
                     ),
                   ),
                   Text(
                     _formatAmount(netPEN, 'PEN'),
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: netPEN >= 0 ? Colors.green.shade900 : Colors.red.shade900,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: themeColors?.savingsText ?? Colors.black,
                     ),
                   ),
                 ],
@@ -605,20 +690,22 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildRecentTransactionsList() {
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+
     if (_recentTransactions.isEmpty) {
       return Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Colors.white24),
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(24),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Center(
             child: Text(
               'No hay operaciones registradas aún.',
               style: TextStyle(
-                color: Colors.white70, // 👈 Blanco/plata nítido en Modo Oscuro
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
@@ -635,28 +722,23 @@ class _DashboardPageState extends State<DashboardPage> {
         final description = t['description'] as String?;
 
         IconData iconData;
-        Color iconColor;
         String typeLabel;
 
         switch (type) {
           case 'income':
             iconData = Icons.arrow_downward;
-            iconColor = Colors.green;
             typeLabel = 'Ingreso';
             break;
           case 'transfer':
             iconData = Icons.swap_horiz;
-            iconColor = Colors.blue;
             typeLabel = 'Transferencia';
             break;
           case 'debt_payment':
             iconData = Icons.handshake_outlined;
-            iconColor = Colors.purple;
             typeLabel = 'Pago deuda';
             break;
           default:
             iconData = Icons.arrow_upward;
-            iconColor = Colors.redAccent;
             typeLabel = 'Gasto';
         }
 
@@ -664,12 +746,29 @@ class _DashboardPageState extends State<DashboardPage> {
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: iconColor.withAlpha(30),
-              child: Icon(iconData, color: iconColor, size: 20),
+              backgroundColor: themeColors?.pillBg,
+              child: Icon(iconData, color: themeColors?.cardAccentText, size: 20),
             ),
-            title: Text(typeLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(description?.isNotEmpty == true ? '$date · $description' : date),
-            trailing: const Icon(Icons.chevron_right, size: 18),
+            title: Text(
+              typeLabel,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: themeColors?.cardBaseText,
+              ),
+            ),
+            subtitle: Text(
+              description?.isNotEmpty == true ? '$date · $description' : date,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
+            trailing: Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             onTap: () => _openEditTransaction(id),
           ),
         );
@@ -681,14 +780,11 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Finanzas Personales',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Finanzas Personales'),
         actions: [
           IconButton(
             icon: const Icon(Icons.palette_outlined),
-            tooltip: 'Apariencia y Estilo',
+            tooltip: 'Apariencia y Estilos',
             onPressed: _openAppearanceSettings,
           ),
         ],
@@ -711,22 +807,17 @@ class _DashboardPageState extends State<DashboardPage> {
 
                   const Text(
                     'Resumen del Mes',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   _buildMonthlySummaryCard(),
                   const SizedBox(height: 24),
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
-                      Text(
-                        'Últimos Movimientos',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                  const Text(
+                    'Últimos Movimientos',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   _buildRecentTransactionsList(),
                   const SizedBox(height: 16),
                 ],
@@ -736,37 +827,40 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-class _QuickActionButton extends StatelessWidget {
+class _ActionBtn extends StatelessWidget {
   final String label;
   final IconData icon;
-  final Color color;
+  final AppThemeColors? themeColors;
   final VoidCallback onTap;
 
-  const _QuickActionButton({
+  const _ActionBtn({
     required this.label,
     required this.icon,
-    required this.color,
+    required this.themeColors,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color.withAlpha(25),
-      borderRadius: BorderRadius.circular(12),
+      color: themeColors?.btnBg ?? Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: themeColors?.btnBorder ?? Colors.white24),
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           child: Column(
             children: [
-              Icon(icon, color: color, size: 22),
+              Icon(icon, color: themeColors?.btnColor ?? Theme.of(context).colorScheme.primary, size: 22),
               const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: color,
+                  color: themeColors?.btnColor ?? Theme.of(context).colorScheme.primary,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -774,67 +868,6 @@ class _QuickActionButton extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SummaryBox extends StatelessWidget {
-  final String title;
-  final int amountPEN;
-  final int amountUSD;
-  final Color color;
-  final IconData icon;
-
-  const _SummaryBox({
-    required this.title,
-    required this.amountPEN,
-    required this.amountUSD,
-    required this.color,
-    required this.icon,
-  });
-
-  String _format(int cents, String currency) {
-    final amount = cents / 100;
-    return currency == 'USD' ? '\$${amount.toStringAsFixed(2)}' : 'S/ ${amount.toStringAsFixed(2)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withAlpha(15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                title,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _format(amountPEN, 'PEN'),
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          if (amountUSD > 0)
-            Text(
-              _format(amountUSD, 'USD'),
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-            ),
-        ],
       ),
     );
   }

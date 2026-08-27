@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/app_themes.dart';
 import '../../repositories/account_repository.dart';
 import '../../repositories/payment_method_repository.dart';
 import '../../models/account.dart';
@@ -197,11 +198,7 @@ class _AccountsPageState extends State<AccountsPage> {
     }
   }
 
-  Widget _buildNetWorthSummary() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
+  Widget _buildNetWorthSummary(AppThemeColors? themeColors) {
     int totalPEN = 0;
     int totalUSD = 0;
 
@@ -214,68 +211,82 @@ class _AccountsPageState extends State<AccountsPage> {
     }
 
     return Card(
-      elevation: 0,
-      color: colorScheme.primaryContainer.withAlpha(isDark ? 80 : 120),
+      elevation: 3,
+      color: themeColors?.heroCardBg ?? Theme.of(context).colorScheme.primaryContainer,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.primary.withAlpha(isDark ? 90 : 60)),
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: themeColors?.heroCardBorder ?? Colors.transparent),
       ),
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.account_balance, color: colorScheme.primary, size: 20),
+                Icon(
+                  Icons.account_balance,
+                  color: themeColors?.heroCardAccent ?? Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Patrimonio Total en Cuentas',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
+                    color: themeColors?.heroCardText ?? Colors.white,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Total Soles', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        'Total Soles',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         _formatAmount(totalPEN, 'PEN'),
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: totalPEN >= 0
-                              ? (isDark ? Colors.greenAccent : Colors.green.shade800)
-                              : Colors.redAccent,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: themeColors?.heroCardAccent ?? Colors.white,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Container(height: 36, width: 1, color: colorScheme.outlineVariant),
+                Container(height: 38, width: 1, color: Colors.white24),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Total Dólares', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        'Total Dólares',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         _formatAmount(totalUSD, 'USD'),
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: totalUSD >= 0
-                              ? (isDark ? Colors.greenAccent : Colors.green.shade800)
-                              : Colors.redAccent,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: themeColors?.heroCardAccent ?? Colors.white,
                         ),
                       ),
                     ],
@@ -291,15 +302,15 @@ class _AccountsPageState extends State<AccountsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cuentas'),
         actions: [
           PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant),
             onSelected: (value) {
               if (value == 'inactive') {
                 Navigator.of(context).push(
@@ -328,14 +339,14 @@ class _AccountsPageState extends State<AccountsPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _buildNetWorthSummary(),
+                _buildNetWorthSummary(themeColors),
                 const SizedBox(height: 8),
                 Text(
                   'Mis Cuentas',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
+                    color: themeColors?.cardBaseText ?? colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -353,9 +364,13 @@ class _AccountsPageState extends State<AccountsPage> {
                   ..._accounts.map((account) {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      color: themeColors?.cardBaseBg,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                      ),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(18),
                         onTap: () async {
                           await Navigator.of(context).push(
                             MaterialPageRoute(
@@ -376,18 +391,19 @@ class _AccountsPageState extends State<AccountsPage> {
                             children: [
                               Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: account.type == 'cash'
-                                        ? (isDark ? Colors.amber.shade900.withAlpha(100) : Colors.amber.shade100)
-                                        : (isDark ? Colors.blue.shade900.withAlpha(100) : Colors.blue.shade100),
+                                  // Círculo de icono con estilo de píldora oficial
+                                  Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color: themeColors?.pillBg,
+                                      shape: BoxShape.circle,
+                                    ),
                                     child: Icon(
                                       account.type == 'cash'
                                           ? Icons.payments_outlined
                                           : Icons.account_balance_outlined,
-                                      color: account.type == 'cash'
-                                          ? (isDark ? Colors.amber.shade200 : Colors.amber.shade900)
-                                          : (isDark ? Colors.blue.shade200 : Colors.blue.shade900),
+                                      color: themeColors?.cardAccentText ?? colorScheme.primary,
                                       size: 20,
                                     ),
                                   ),
@@ -399,9 +415,9 @@ class _AccountsPageState extends State<AccountsPage> {
                                         Text(
                                           account.name,
                                           style: TextStyle(
-                                            fontSize: 18,
+                                            fontSize: 16,
                                             fontWeight: FontWeight.bold,
-                                            color: colorScheme.onSurface,
+                                            color: themeColors?.cardBaseText ?? colorScheme.onSurface,
                                           ),
                                         ),
                                         Text(
@@ -412,6 +428,7 @@ class _AccountsPageState extends State<AccountsPage> {
                                     ),
                                   ),
                                   PopupMenuButton<String>(
+                                    icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant),
                                     onSelected: (value) async {
                                       if (value == 'edit') {
                                         await _editAccount(account);
@@ -452,10 +469,10 @@ class _AccountsPageState extends State<AccountsPage> {
                                         _formatAmount(account.currentBalance, account.currency),
                                         style: TextStyle(
                                           fontSize: 24,
-                                          fontWeight: FontWeight.bold,
+                                          fontWeight: FontWeight.w800,
                                           color: account.currentBalance >= 0
-                                              ? colorScheme.onSurface
-                                              : Colors.redAccent,
+                                              ? (themeColors?.cardBaseText ?? colorScheme.onSurface)
+                                              : colorScheme.error,
                                         ),
                                       ),
                                     ],
@@ -464,7 +481,7 @@ class _AccountsPageState extends State<AccountsPage> {
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              Divider(height: 1, color: colorScheme.outlineVariant),
+                              Divider(height: 1, color: themeColors?.cardBaseBorder ?? Colors.white12),
                               const SizedBox(height: 8),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -473,19 +490,21 @@ class _AccountsPageState extends State<AccountsPage> {
                                     'Inicial: ${_formatAmount(account.initialBalance, account.currency)}',
                                     style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
                                   ),
+                                  // Entradas en el Oro Oficial de la paleta
                                   Text(
                                     'Entradas: +${_formatAmount(account.totalIn, account.currency)}',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: isDark ? Colors.greenAccent : Colors.green.shade700,
+                                      color: themeColors?.cardAccentText ?? Colors.green,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
+                                  // Salidas en color plata/atenuado
                                   Text(
                                     'Salidas: -${_formatAmount(account.totalOut, account.currency)}',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: isDark ? Colors.redAccent : Colors.red.shade700,
+                                      color: colorScheme.onSurfaceVariant,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -497,14 +516,20 @@ class _AccountsPageState extends State<AccountsPage> {
                                   spacing: 6,
                                   runSpacing: 4,
                                   children: account.paymentMethods
-                                      .map((method) => Chip(
-                                            visualDensity: VisualDensity.compact,
-                                            backgroundColor: colorScheme.surfaceContainerHighest,
-                                            side: BorderSide(color: colorScheme.outlineVariant),
-                                            padding: EdgeInsets.zero,
-                                            label: Text(
+                                      .map((method) => Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: themeColors?.pillBg,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: themeColors?.pillBorder ?? Colors.transparent),
+                                            ),
+                                            child: Text(
                                               method,
-                                              style: TextStyle(fontSize: 11, color: colorScheme.onSurface),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: themeColors?.pillText ?? colorScheme.onSurface,
+                                              ),
                                             ),
                                           ))
                                       .toList(),

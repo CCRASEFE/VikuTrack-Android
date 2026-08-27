@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/app_themes.dart';
 import '../../models/debt.dart';
 import '../../models/person_owed.dart';
 import '../../repositories/debt_repository.dart';
@@ -290,69 +291,89 @@ class _DebtsPageState extends State<DebtsPage> {
     }
   }
 
-  Widget _buildSummaryHeader(bool isDark) {
+  Widget _buildSummaryHeader(AppThemeColors? themeColors) {
     final isDebts = _selectedSection == 'debts';
     final title = isDebts ? 'Total Pendiente por Pagar' : 'Total por Cobrar a Favor';
     final pen = isDebts ? _pendingDebtsPEN : _owedToMePEN;
     final usd = isDebts ? _pendingDebtsUSD : _owedToMeUSD;
-    final color = isDebts
-        ? (isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900)
-        : (isDark ? Colors.tealAccent : Colors.teal.shade900);
-    final bgColor = isDebts
-        ? (isDark ? Colors.purple.shade900.withAlpha(80) : Colors.purple.shade50)
-        : (isDark ? Colors.teal.shade900.withAlpha(80) : Colors.teal.shade50);
-    final borderColor = isDebts
-        ? (isDark ? Colors.purple.shade700 : Colors.purple.shade200)
-        : (isDark ? Colors.teal.shade700 : Colors.teal.shade200);
-    final subtextColor = isDark ? Colors.white70 : Colors.black54;
 
     return Card(
-      elevation: 0,
-      color: bgColor,
+      elevation: 3,
+      color: themeColors?.heroCardBg ?? Theme.of(context).colorScheme.primaryContainer,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: borderColor),
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: themeColors?.heroCardBorder ?? Colors.transparent),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(isDebts ? Icons.credit_card_off : Icons.volunteer_activism, color: color, size: 20),
+                Icon(
+                  isDebts ? Icons.credit_card_off : Icons.volunteer_activism,
+                  color: themeColors?.heroCardAccent ?? Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: themeColors?.heroCardText ?? Colors.white,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('En Soles', style: TextStyle(fontSize: 11, color: subtextColor)),
+                      Text(
+                        'En Soles',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         _formatAmount(pen, 'PEN'),
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: themeColors?.heroCardAccent ?? Colors.white,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Container(height: 36, width: 1, color: borderColor),
+                Container(height: 38, width: 1, color: Colors.white24),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('En Dólares', style: TextStyle(fontSize: 11, color: subtextColor)),
+                      Text(
+                        'En Dólares',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         _formatAmount(usd, 'USD'),
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: themeColors?.heroCardAccent ?? Colors.white,
+                        ),
                       ),
                     ],
                   ),
@@ -365,18 +386,21 @@ class _DebtsPageState extends State<DebtsPage> {
     );
   }
 
-  Widget _buildSectionSwitcher() {
+  Widget _buildSectionSwitcher(AppThemeColors? themeColors) {
     return SegmentedButton<String>(
-      segments: const [
+      style: const ButtonStyle(
+        visualDensity: VisualDensity.compact,
+      ),
+      segments: [
         ButtonSegment(
           value: 'debts',
-          label: Text('Debo Yo (Deudas)'),
-          icon: Icon(Icons.arrow_upward, size: 16, color: Colors.purple),
+          label: const Text('Debo Yo (Deudas)', style: TextStyle(fontSize: 12)),
+          icon: Icon(Icons.arrow_upward, size: 14, color: themeColors?.cardAccentText),
         ),
         ButtonSegment(
           value: 'people',
-          label: Text('Me Deben (Préstamos)'),
-          icon: Icon(Icons.arrow_downward, size: 16, color: Colors.teal),
+          label: const Text('Me Deben (Préstamos)', style: TextStyle(fontSize: 12)),
+          icon: Icon(Icons.arrow_downward, size: 14, color: themeColors?.cardAccentText),
         ),
       ],
       selected: {_selectedSection},
@@ -390,16 +414,16 @@ class _DebtsPageState extends State<DebtsPage> {
     );
   }
 
-  Widget _buildDebtsList(bool isDark) {
+  Widget _buildDebtsList(AppThemeColors? themeColors) {
     final colorScheme = Theme.of(context).colorScheme;
-    final subtextColor = isDark ? Colors.white70 : Colors.black54;
 
     if (_debts.isEmpty) {
       return Card(
         elevation: 0,
+        color: themeColors?.cardBaseBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
         ),
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -407,7 +431,7 @@ class _DebtsPageState extends State<DebtsPage> {
             child: Text(
               'No tienes deudas pendientes registradas.\n¡Excelente estado financiero!',
               textAlign: TextAlign.center,
-              style: TextStyle(color: subtextColor),
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
             ),
           ),
         ),
@@ -428,9 +452,13 @@ class _DebtsPageState extends State<DebtsPage> {
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          color: themeColors?.cardBaseBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+          ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             onTap: () async {
               final res = await Navigator.of(context).push(
                 MaterialPageRoute(
@@ -448,10 +476,18 @@ class _DebtsPageState extends State<DebtsPage> {
                 children: [
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: isDark ? Colors.purple.shade900.withAlpha(100) : Colors.purple.shade50,
-                        child: Icon(Icons.handshake_outlined, color: isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900, size: 20),
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: themeColors?.pillBg,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.handshake_outlined,
+                          color: themeColors?.cardAccentText ?? colorScheme.primary,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -460,19 +496,27 @@ class _DebtsPageState extends State<DebtsPage> {
                           children: [
                             Text(
                               desc,
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                              ),
                             ),
-                            Text('Registrada: $date', style: TextStyle(fontSize: 11, color: subtextColor)),
+                            Text(
+                              'Registrada: $date',
+                              style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                            ),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                         decoration: BoxDecoration(
                           color: isPaidOff
-                              ? (isDark ? Colors.green.shade900.withAlpha(80) : Colors.green.shade50)
-                              : (isDark ? Colors.purple.shade900.withAlpha(80) : Colors.purple.shade50),
+                              ? (themeColors?.savingsBg ?? Colors.green)
+                              : themeColors?.pillBg,
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: themeColors?.pillBorder ?? Colors.transparent),
                         ),
                         child: Text(
                           isPaidOff ? 'Pagada' : 'Pendiente',
@@ -480,8 +524,8 @@ class _DebtsPageState extends State<DebtsPage> {
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: isPaidOff
-                                ? (isDark ? Colors.greenAccent : Colors.green.shade800)
-                                : (isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900),
+                                ? (themeColors?.savingsText ?? Colors.white)
+                                : (themeColors?.cardAccentText ?? colorScheme.primary),
                           ),
                         ),
                       ),
@@ -495,15 +539,15 @@ class _DebtsPageState extends State<DebtsPage> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Pendiente por pagar', style: TextStyle(fontSize: 11, color: subtextColor)),
+                          Text('Pendiente por pagar', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
                           Text(
                             _formatAmount(pending, currency),
                             style: TextStyle(
                               fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w800,
                               color: isPaidOff
-                                  ? (isDark ? Colors.greenAccent : Colors.green.shade800)
-                                  : (isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900),
+                                  ? colorScheme.onSurfaceVariant
+                                  : (themeColors?.cardAccentText ?? colorScheme.primary),
                             ),
                           ),
                         ],
@@ -511,10 +555,10 @@ class _DebtsPageState extends State<DebtsPage> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('Total original', style: TextStyle(fontSize: 11, color: subtextColor)),
+                          Text('Total original', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
                           Text(
                             _formatAmount(original, currency),
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: themeColors?.cardBaseText),
                           ),
                         ],
                       ),
@@ -527,9 +571,9 @@ class _DebtsPageState extends State<DebtsPage> {
                     child: LinearProgressIndicator(
                       value: progress,
                       minHeight: 6,
-                      backgroundColor: isDark ? Colors.white12 : Colors.grey.shade200,
+                      backgroundColor: Colors.white12,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        isPaidOff ? Colors.green : (isDark ? Colors.purpleAccent : Colors.purple),
+                        themeColors?.cardAccentText ?? colorScheme.primary,
                       ),
                     ),
                   ),
@@ -540,13 +584,13 @@ class _DebtsPageState extends State<DebtsPage> {
                     children: [
                       Text(
                         'Abonado: ${_formatAmount(paid, currency)} (${(progress * 100).toInt()}%)',
-                        style: TextStyle(fontSize: 11, color: subtextColor),
+                        style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
                       ),
                       Text(
                         'Ver detalles e historial >',
                         style: TextStyle(
                           fontSize: 11,
-                          color: isDark ? Colors.purpleAccent.shade100 : Colors.purple,
+                          color: themeColors?.cardAccentText ?? colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -561,16 +605,16 @@ class _DebtsPageState extends State<DebtsPage> {
     );
   }
 
-  Widget _buildPeopleOwedList(bool isDark) {
+  Widget _buildPeopleOwedList(AppThemeColors? themeColors) {
     final colorScheme = Theme.of(context).colorScheme;
-    final subtextColor = isDark ? Colors.white70 : Colors.black54;
 
     if (_peopleOwed.isEmpty) {
       return Card(
         elevation: 0,
+        color: themeColors?.cardBaseBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
         ),
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -578,7 +622,7 @@ class _DebtsPageState extends State<DebtsPage> {
             child: Text(
               'No tienes cuentas por cobrar pendientes.\nNadie te debe dinero actualmente.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: subtextColor),
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
             ),
           ),
         ),
@@ -589,19 +633,33 @@ class _DebtsPageState extends State<DebtsPage> {
       children: _peopleOwed.map((p) {
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          color: themeColors?.cardBaseBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+          ),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: isDark ? Colors.teal.shade900.withAlpha(100) : Colors.teal.shade50,
+              backgroundColor: themeColors?.pillBg,
               child: Text(
                 p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
-                style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.tealAccent : Colors.teal.shade900),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: themeColors?.cardAccentText ?? colorScheme.primary,
+                ),
               ),
             ),
-            title: Text(p.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
+            title: Text(
+              p.name,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+              ),
+            ),
             subtitle: Text(
               p.note?.isNotEmpty == true ? '${p.date} · ${p.note!}' : p.date,
-              style: TextStyle(fontSize: 12, color: subtextColor),
+              style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -610,12 +668,12 @@ class _DebtsPageState extends State<DebtsPage> {
                   _formatAmount(p.amount, p.currency),
                   style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.tealAccent : Colors.teal.shade800,
+                    fontWeight: FontWeight.w800,
+                    color: themeColors?.cardAccentText ?? colorScheme.primary,
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.check_circle_outline, color: Colors.teal),
+                  icon: Icon(Icons.check_circle_outline, color: themeColors?.cardAccentText),
                   tooltip: 'Marcar como cobrado',
                   onPressed: () => _deletePersonOwed(p),
                 ),
@@ -629,7 +687,7 @@ class _DebtsPageState extends State<DebtsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
 
     return Scaffold(
       appBar: AppBar(
@@ -642,11 +700,11 @@ class _DebtsPageState extends State<DebtsPage> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildSummaryHeader(isDark),
+                  _buildSummaryHeader(themeColors),
                   const SizedBox(height: 16),
-                  _buildSectionSwitcher(),
+                  _buildSectionSwitcher(themeColors),
                   const SizedBox(height: 16),
-                  if (_selectedSection == 'debts') _buildDebtsList(isDark) else _buildPeopleOwedList(isDark),
+                  if (_selectedSection == 'debts') _buildDebtsList(themeColors) else _buildPeopleOwedList(themeColors),
                 ],
               ),
             ),

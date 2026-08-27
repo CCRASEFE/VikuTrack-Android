@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/app_themes.dart';
 import 'create_transaction_page.dart';
 import 'edit_transaction_page.dart';
 import '../../repositories/transaction_repository.dart';
@@ -110,22 +111,21 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   Future<void> _showTransactionActions(int transactionId) async {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
 
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: themeColors?.cardBaseBg ?? Theme.of(context).colorScheme.surface,
       builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(Icons.edit, color: isDark ? Colors.white70 : Colors.black87),
+                leading: Icon(Icons.edit, color: themeColors?.cardAccentText),
                 title: Text(
                   'Editar operación',
-                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                  style: TextStyle(color: themeColors?.cardBaseText),
                 ),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
@@ -148,71 +148,65 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
   }
 
-  Widget _buildFilterChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildFilterChip('all', 'Todas'),
-          const SizedBox(width: 8),
-          _buildFilterChip('expense', 'Gastos', icon: Icons.arrow_upward, color: Colors.redAccent),
-          const SizedBox(width: 8),
-          _buildFilterChip('income', 'Ingresos', icon: Icons.arrow_downward, color: Colors.green),
-          const SizedBox(width: 8),
-          _buildFilterChip('transfer', 'Transferencias', icon: Icons.swap_horiz, color: Colors.blueAccent),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String type, String label, {IconData? icon, Color? color}) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+  Widget _buildFilterPill(String type, String label, AppThemeColors? themeColors) {
     final isSelected = _filterType == type;
 
-    return FilterChip(
-      selected: isSelected,
-      showCheckmark: false,
-      avatar: icon != null
-          ? Icon(
-              icon,
-              size: 16,
-              color: isSelected
-                  ? Colors.white
-                  : (isDark ? Colors.white70 : (color ?? colorScheme.primary)),
-            )
-          : null,
-      label: Text(label),
-      backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
-      selectedColor: color ?? colorScheme.primary,
-      side: BorderSide(
-        color: isSelected
-            ? Colors.transparent
-            : (isDark ? Colors.white24 : Colors.grey.shade300),
-      ),
-      labelStyle: TextStyle(
-        color: isSelected
-            ? Colors.white
-            : (isDark ? Colors.white : Colors.black87),
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-        fontSize: 13,
-      ),
-      onSelected: (selected) {
+    return GestureDetector(
+      onTap: () {
         setState(() {
           _filterType = type;
           _loading = true;
         });
         _loadTransactions();
       },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (themeColors?.cardAccentText ?? Colors.amber)
+              : (themeColors?.cardBaseBg ?? Colors.white12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected
+                ? Colors.transparent
+                : (themeColors?.cardBaseBorder ?? Colors.white24),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: isSelected
+                ? (themeColors?.navBg ?? Colors.black)
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterRow(AppThemeColors? themeColors) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildFilterPill('all', 'Todas', themeColors),
+          const SizedBox(width: 8),
+          _buildFilterPill('expense', '↑ Gastos', themeColors),
+          const SizedBox(width: 8),
+          _buildFilterPill('income', '↓ Ingresos', themeColors),
+          const SizedBox(width: 8),
+          _buildFilterPill('transfer', '⇄ Transferencias', themeColors),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -225,25 +219,24 @@ class _TransactionsPageState extends State<TransactionsPage> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildFilterChips(),
-                  const SizedBox(height: 12),
+                  _buildFilterRow(themeColors),
+                  const SizedBox(height: 14),
 
                   if (_transactions.isEmpty)
                     Card(
                       elevation: 0,
+                      color: themeColors?.cardBaseBg,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: colorScheme.outlineVariant),
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(40),
                         child: Center(
                           child: Text(
-                            'No hay operaciones que coincidan con este filtro.',
+                            'No hay operaciones registradas.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: isDark ? Colors.white70 : Colors.black54,
-                            ),
+                            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
                           ),
                         ),
                       ),
@@ -261,34 +254,29 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       final accountName = t['account_name'] as String?;
 
                       IconData iconData;
-                      Color itemColor;
                       String prefix;
                       String titleText;
 
                       if (type == 'expense') {
                         iconData = Icons.arrow_upward;
-                        itemColor = isDark ? const Color(0xFFFF6B6B) : Colors.redAccent.shade700;
                         prefix = '-';
                         titleText = description?.isNotEmpty == true
                             ? description!
                             : (categoryName ?? 'Gasto');
                       } else if (type == 'income') {
                         iconData = Icons.arrow_downward;
-                        itemColor = isDark ? const Color(0xFF51CF66) : Colors.green.shade800;
                         prefix = '+';
                         titleText = description?.isNotEmpty == true
                             ? description!
                             : (categoryName ?? 'Ingreso');
                       } else if (type == 'transfer') {
                         iconData = Icons.swap_horiz;
-                        itemColor = isDark ? const Color(0xFF4DABF7) : Colors.blue.shade800;
                         prefix = '';
                         titleText = description?.isNotEmpty == true
                             ? description!
                             : 'Transferencia';
                       } else {
                         iconData = Icons.handshake_outlined;
-                        itemColor = isDark ? const Color(0xFFCC5DE8) : Colors.purple.shade800;
                         prefix = '-';
                         titleText = 'Pago de deuda';
                       }
@@ -303,20 +291,33 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        color: themeColors?.cardBaseBg,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                        ),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(18),
                           onTap: () => _editTransaction(id),
                           child: Padding(
                             padding: const EdgeInsets.all(14),
                             child: Row(
                               children: [
-                                CircleAvatar(
-                                  radius: 20,
-                                  backgroundColor: itemColor.withAlpha(isDark ? 45 : 25),
-                                  child: Icon(iconData, color: itemColor, size: 20),
+                                // Círculo de ícono con estilo temático oficial
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: themeColors?.pillBg,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    iconData,
+                                    color: themeColors?.cardAccentText ?? colorScheme.primary,
+                                    size: 20,
+                                  ),
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -328,7 +329,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 15,
-                                          color: isDark ? Colors.white : Colors.black87,
+                                          color: themeColors?.cardBaseText ?? colorScheme.onSurface,
                                         ),
                                       ),
                                       const SizedBox(height: 2),
@@ -338,7 +339,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: isDark ? Colors.white70 : Colors.black54,
+                                          color: colorScheme.onSurfaceVariant,
                                         ),
                                       ),
                                       if (accountName != null) ...[
@@ -349,7 +350,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: isDark ? Colors.white60 : Colors.black45,
+                                            color: colorScheme.onSurfaceVariant.withAlpha(160),
                                           ),
                                         ),
                                       ],
@@ -360,12 +361,13 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
+                                    // Todos los importes en color dorado oficial del tema
                                     Text(
                                       '$prefix${_formatAmount(amount, currency)}',
                                       style: TextStyle(
                                         fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: itemColor,
+                                        fontWeight: FontWeight.w800,
+                                        color: themeColors?.cardAccentText ?? colorScheme.primary,
                                       ),
                                     ),
                                     IconButton(
@@ -374,7 +376,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                       icon: Icon(
                                         Icons.more_vert,
                                         size: 18,
-                                        color: isDark ? Colors.white60 : Colors.black38,
+                                        color: colorScheme.onSurfaceVariant,
                                       ),
                                       onPressed: () => _showTransactionActions(id),
                                     ),

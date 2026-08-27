@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/app_themes.dart';
 import '../../models/account.dart';
 import '../../models/reservation.dart';
 import '../../repositories/account_repository.dart';
@@ -177,72 +178,84 @@ class _ReservationsPageState extends State<ReservationsPage> {
     );
   }
 
-  Widget _buildSummaryCard(bool isDark) {
-    final bgColor = isDark ? Colors.deepPurple.shade900.withAlpha(80) : Colors.deepPurple.shade50;
-    final borderColor = isDark ? Colors.deepPurple.shade700 : Colors.deepPurple.shade200;
-    final titleColor = isDark ? Colors.deepPurple.shade200 : Colors.deepPurple.shade800;
-    final amountColor = isDark ? Colors.purpleAccent.shade100 : Colors.deepPurple.shade900;
-    final subtextColor = isDark ? Colors.white70 : Colors.black54;
-
+  Widget _buildSummaryCard(AppThemeColors? themeColors) {
     return Card(
-      elevation: 0,
-      color: bgColor,
+      elevation: 3,
+      color: themeColors?.heroCardBg ?? Theme.of(context).colorScheme.primaryContainer,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: borderColor),
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: themeColors?.heroCardBorder ?? Colors.transparent),
       ),
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.lock_clock, color: titleColor, size: 20),
+                Icon(
+                  Icons.savings_outlined,
+                  color: themeColors?.heroCardAccent ?? Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Total Dinero Reservado',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: titleColor,
+                    color: themeColors?.heroCardText ?? Colors.white,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Reservado en Soles', style: TextStyle(fontSize: 12, color: subtextColor)),
+                      Text(
+                        'Reservado en Soles',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         _formatAmount(_totalPEN, 'PEN'),
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: amountColor,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: themeColors?.heroCardAccent ?? Colors.white,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Container(height: 36, width: 1, color: borderColor),
+                Container(height: 38, width: 1, color: Colors.white24),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Reservado en Dólares', style: TextStyle(fontSize: 12, color: subtextColor)),
+                      Text(
+                        'Reservado en Dólares',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         _formatAmount(_totalUSD, 'USD'),
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: amountColor,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: themeColors?.heroCardAccent ?? Colors.white,
                         ),
                       ),
                     ],
@@ -258,9 +271,8 @@ class _ReservationsPageState extends State<ReservationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -271,20 +283,25 @@ class _ReservationsPageState extends State<ReservationsPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _buildSummaryCard(isDark),
+                _buildSummaryCard(themeColors),
                 const SizedBox(height: 8),
                 Text(
                   'Mis Fondos Reservados',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                  ),
                 ),
                 const SizedBox(height: 8),
 
                 if (_reservations.isEmpty)
                   Card(
                     elevation: 0,
+                    color: themeColors?.cardBaseBg,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: colorScheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(18),
+                      side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(32),
@@ -293,7 +310,7 @@ class _ReservationsPageState extends State<ReservationsPage> {
                           'No tienes reservas activas.\n\n'
                           'Crea una reserva para apartar dinero de tus cuentas para metas o emergencias.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                          style: TextStyle(color: colorScheme.onSurfaceVariant),
                         ),
                       ),
                     ),
@@ -308,7 +325,11 @@ class _ReservationsPageState extends State<ReservationsPage> {
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      color: themeColors?.cardBaseBg,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -316,14 +337,16 @@ class _ReservationsPageState extends State<ReservationsPage> {
                           children: [
                             Row(
                               children: [
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: isDark
-                                      ? Colors.deepPurple.shade900.withAlpha(120)
-                                      : Colors.deepPurple.shade100,
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: themeColors?.pillBg,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                   child: Icon(
                                     Icons.savings_outlined,
-                                    color: isDark ? Colors.purpleAccent.shade100 : Colors.deepPurple.shade800,
+                                    color: themeColors?.cardAccentText ?? colorScheme.primary,
                                     size: 20,
                                   ),
                                 ),
@@ -335,22 +358,26 @@ class _ReservationsPageState extends State<ReservationsPage> {
                                       Text(
                                         name,
                                         style: TextStyle(
-                                          fontSize: 17,
+                                          fontSize: 16,
                                           fontWeight: FontWeight.bold,
-                                          color: colorScheme.onSurface,
+                                          color: themeColors?.cardBaseText ?? colorScheme.onSurface,
                                         ),
                                       ),
                                       Text(
                                         'Cuenta: $accountName ($currency)',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: isDark ? Colors.white70 : Colors.black54,
+                                          color: colorScheme.onSurfaceVariant,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
                                 PopupMenuButton<String>(
+                                  icon: Icon(
+                                    Icons.more_vert,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
                                   onSelected: (value) async {
                                     if (value == 'edit') {
                                       await _editReservation(item);
@@ -375,7 +402,7 @@ class _ReservationsPageState extends State<ReservationsPage> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 14),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -383,25 +410,26 @@ class _ReservationsPageState extends State<ReservationsPage> {
                                   _formatAmount(amount, currency),
                                   style: TextStyle(
                                     fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? Colors.purpleAccent.shade100
-                                        : Colors.deepPurple.shade900,
+                                    fontWeight: FontWeight.w800,
+                                    color: themeColors?.cardAccentText ?? colorScheme.primary,
                                   ),
                                 ),
                                 if (reason?.isNotEmpty == true)
                                   Flexible(
-                                    child: Chip(
-                                      visualDensity: VisualDensity.compact,
-                                      backgroundColor: colorScheme.surfaceContainerHighest,
-                                      side: BorderSide(color: colorScheme.outlineVariant),
-                                      label: Text(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: themeColors?.pillBg,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: themeColors?.pillBorder ?? Colors.transparent),
+                                      ),
+                                      child: Text(
                                         reason!,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: colorScheme.onSurface,
-                                          fontWeight: FontWeight.w500,
+                                          fontWeight: FontWeight.w600,
+                                          color: themeColors?.pillText ?? colorScheme.onSurface,
                                         ),
                                       ),
                                     ),

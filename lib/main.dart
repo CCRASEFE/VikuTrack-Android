@@ -30,46 +30,12 @@ class FinanzasApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: themeController,
       builder: (context, _) {
-        final seedColor = themeController.selectedColor.color;
-
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title: 'VikuTrack',
+          title: 'Finanzas Personales',
           themeMode: themeController.themeMode,
-
-          // Tema Claro
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: seedColor,
-              brightness: Brightness.light,
-            ),
-            useMaterial3: true,
-          ),
-
-          // Tema Oscuro con navegación de alto contraste
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: seedColor,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-            navigationBarTheme: NavigationBarThemeData(
-              indicatorColor: seedColor.withAlpha(80),
-              labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white);
-                }
-                return const TextStyle(fontSize: 12, color: Colors.white70);
-              }),
-              iconTheme: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return const IconThemeData(color: Colors.white);
-                }
-                return const IconThemeData(color: Colors.white70);
-              }),
-            ),
-          ),
-
+          theme: themeController.lightTheme,
+          darkTheme: themeController.darkTheme,
           home: const MainPage(),
         );
       },

@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/app_themes.dart';
 import '../../models/account.dart';
 import '../../models/debt.dart';
 import '../../repositories/account_repository.dart';
@@ -90,6 +91,8 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        final themeColors = Theme.of(context).extension<AppThemeColors>();
+
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -100,7 +103,11 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                   children: [
                     Text(
                       'Saldo pendiente actual: ${_formatAmount(pending, _debt!.currency)}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.purple),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: themeColors?.cardAccentText ?? Colors.amber,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -250,10 +257,8 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final subtextColor = isDark ? Colors.white70 : Colors.black54;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     if (_loading || _debt == null) {
       return Scaffold(
@@ -282,7 +287,11 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
         children: [
           Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            color: themeColors?.cardBaseBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -293,39 +302,44 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                     children: [
                       Text(
                         _debt!.description,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                        ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: isPaidOff
-                              ? (isDark ? Colors.green.shade900.withAlpha(80) : Colors.green.shade50)
-                              : (isDark ? Colors.purple.shade900.withAlpha(80) : Colors.purple.shade50),
+                              ? (themeColors?.savingsBg ?? Colors.green)
+                              : themeColors?.pillBg,
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: themeColors?.pillBorder ?? Colors.transparent),
                         ),
                         child: Text(
-                          isPaidOff ? 'Completamente Pagada' : 'Pendiente de Pago',
+                          isPaidOff ? 'Pagada' : 'Pendiente',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: isPaidOff
-                                ? (isDark ? Colors.greenAccent : Colors.green.shade800)
-                                : (isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900),
+                                ? (themeColors?.savingsText ?? Colors.white)
+                                : (themeColors?.cardAccentText ?? colorScheme.primary),
                           ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text('Pendiente:', style: TextStyle(fontSize: 12, color: subtextColor)),
+                  Text('Pendiente:', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
                   Text(
                     _formatAmount(pending, _debt!.currency),
                     style: TextStyle(
                       fontSize: 30,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: isPaidOff
-                          ? (isDark ? Colors.greenAccent : Colors.green.shade800)
-                          : (isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900),
+                          ? colorScheme.onSurfaceVariant
+                          : (themeColors?.cardAccentText ?? colorScheme.primary),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -334,9 +348,9 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                     child: LinearProgressIndicator(
                       value: progress,
                       minHeight: 10,
-                      backgroundColor: isDark ? Colors.white12 : Colors.grey.shade200,
+                      backgroundColor: Colors.white12,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        isPaidOff ? Colors.green : (isDark ? Colors.purpleAccent : Colors.purple),
+                        themeColors?.cardAccentText ?? colorScheme.primary,
                       ),
                     ),
                   ),
@@ -346,13 +360,17 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                     children: [
                       Text(
                         'Total: ${_formatAmount(_debt!.originalAmount, _debt!.currency)}',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: themeColors?.cardBaseText,
+                        ),
                       ),
                       Text(
                         'Abonado: ${_formatAmount(_paidTotal, _debt!.currency)} (${(progress * 100).toInt()}%)',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDark ? Colors.greenAccent : Colors.green.shade800,
+                          color: themeColors?.cardAccentText ?? colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -373,7 +391,8 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                 label: const Text('Realizar Abono / Pago'),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: isDark ? Colors.purple.shade700 : Colors.purple.shade800,
+                  backgroundColor: themeColors?.fabBg ?? colorScheme.primary,
+                  foregroundColor: themeColors?.fabText ?? Colors.black,
                 ),
               ),
             ),
@@ -381,23 +400,28 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
 
           Text(
             'Historial de Abonos Realizados',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 8),
 
           if (_payments.isEmpty)
             Card(
               elevation: 0,
+              color: themeColors?.cardBaseBg,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Center(
                   child: Text(
                     'No se han realizado abonos a esta deuda aún.',
-                    style: TextStyle(color: subtextColor),
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
                   ),
                 ),
               ),
@@ -413,26 +437,40 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
+                color: themeColors?.cardBaseBg,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                ),
                 child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isDark ? Colors.purple.shade900.withAlpha(100) : Colors.purple.shade50,
-                    child: Icon(Icons.check, color: isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900, size: 20),
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: themeColors?.pillBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.check,
+                      color: themeColors?.cardAccentText ?? colorScheme.primary,
+                      size: 20,
+                    ),
                   ),
                   title: Text(
                     desc?.isNotEmpty == true ? desc! : 'Abono a deuda',
-                    style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+                    style: TextStyle(fontWeight: FontWeight.w600, color: themeColors?.cardBaseText),
                   ),
                   subtitle: Text(
                     '$date · $time\nDesde: $acc ($method)',
-                    style: TextStyle(fontSize: 12, color: subtextColor),
+                    style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                   ),
                   isThreeLine: true,
                   trailing: Text(
                     _formatAmount(amt, _debt!.currency),
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.purpleAccent.shade100 : Colors.purple.shade900,
+                      fontWeight: FontWeight.w800,
+                      color: themeColors?.cardAccentText ?? colorScheme.primary,
                     ),
                   ),
                 ),

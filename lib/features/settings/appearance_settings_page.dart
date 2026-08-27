@@ -3,6 +3,7 @@
 // ==========================================
 
 import 'package:flutter/material.dart';
+import '../../core/app_themes.dart';
 import '../../core/theme_controller.dart';
 
 class AppearanceSettingsPage extends StatefulWidget {
@@ -15,18 +16,7 @@ class AppearanceSettingsPage extends StatefulWidget {
 class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
   final _controller = ThemeController.instance;
 
-  String _getModeLabel(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return 'Modo Claro';
-      case ThemeMode.dark:
-        return 'Modo Oscuro';
-      case ThemeMode.system:
-        return 'Automático';
-    }
-  }
-
-  Widget _buildThemeModeSelector() {
+  Widget _buildThemeModeSelector(bool isDark) {
     return SegmentedButton<ThemeMode>(
       style: const ButtonStyle(
         visualDensity: VisualDensity.compact,
@@ -34,19 +24,16 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
       ),
       segments: const [
         ButtonSegment(
-          value: ThemeMode.system,
-          label: Text('Auto', style: TextStyle(fontSize: 12)),
-          icon: Icon(Icons.brightness_auto, size: 14),
+          value: ThemeMode.dark,
+          label: Text('Oscuro 🌙', style: TextStyle(fontSize: 12)),
         ),
         ButtonSegment(
           value: ThemeMode.light,
-          label: Text('Claro', style: TextStyle(fontSize: 12)),
-          icon: Icon(Icons.light_mode, size: 14),
+          label: Text('Claro ☀️', style: TextStyle(fontSize: 12)),
         ),
         ButtonSegment(
-          value: ThemeMode.dark,
-          label: Text('Oscuro', style: TextStyle(fontSize: 12)),
-          icon: Icon(Icons.dark_mode, size: 14),
+          value: ThemeMode.system,
+          label: Text('Sistema 🌓', style: TextStyle(fontSize: 12)),
         ),
       ],
       selected: {_controller.themeMode},
@@ -60,98 +47,136 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     );
   }
 
-  Widget _buildColorPaletteGrid(bool isDark) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _buildPalettesList(bool isDark) {
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 1.1,
-      ),
-      itemCount: ThemeController.colorOptions.length,
-      itemBuilder: (context, index) {
-        final option = ThemeController.colorOptions[index];
-        final isSelected = _controller.selectedColor.key == option.key;
+    return Column(
+      children: ThemeController.palettes.map((pInfo) {
+        final isSelected = _controller.activePalette == pInfo.palette;
 
         return Card(
-          elevation: isSelected ? 3 : 0,
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          margin: const EdgeInsets.only(bottom: 12),
+          elevation: isSelected ? 2 : 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             side: BorderSide(
-              color: isSelected ? option.color : (isDark ? Colors.white24 : Colors.grey.shade300),
-              width: isSelected ? 2.5 : 1,
+              color: isSelected
+                  ? (themeColors?.cardAccentText ?? Theme.of(context).colorScheme.primary)
+                  : (themeColors?.cardBaseBorder ?? Colors.white24),
+              width: isSelected ? 2.2 : 1,
             ),
           ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             onTap: () {
               setState(() {
-                _controller.setColorOption(option);
+                _controller.setPalette(pInfo.palette);
               });
             },
             child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              padding: const EdgeInsets.all(16),
+              child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: option.color,
-                    child: isSelected
-                        ? const Icon(Icons.check, color: Colors.white, size: 18)
-                        : null,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    option.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected ? option.color : colorScheme.onSurface,
+                  // Muestras de color en círculos solapados
+                  SizedBox(
+                    width: 72,
+                    height: 28,
+                    child: Stack(
+                      children: [
+                        Positioned(left: 0, child: _colorCircle(pInfo.previewColors[0])),
+                        Positioned(left: 14, child: _colorCircle(pInfo.previewColors[1])),
+                        Positioned(left: 28, child: _colorCircle(pInfo.previewColors[2])),
+                        Positioned(left: 42, child: _colorCircle(pInfo.previewColors[3])),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          pInfo.title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected
+                                ? (themeColors?.cardAccentText ?? Theme.of(context).colorScheme.primary)
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          pInfo.subtitle,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isSelected)
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: themeColors?.cardAccentText ?? Theme.of(context).colorScheme.primary,
+                      child: const Icon(Icons.check, size: 16, color: Colors.black),
+                    ),
                 ],
               ),
             ),
           ),
         );
-      },
+      }).toList(),
+    );
+  }
+
+  Widget _colorCircle(Color color) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.black38, width: 1.5),
+      ),
     );
   }
 
   Widget _buildLivePreviewCard(bool isDark) {
-    final color = _controller.selectedColor.color;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
 
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: themeColors?.heroCardBorder ?? Colors.transparent),
+      ),
+      color: themeColors?.heroCardBg ?? Theme.of(context).colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.remove_red_eye_outlined, color: color, size: 20),
+                Icon(
+                  Icons.shield_outlined,
+                  color: themeColors?.heroCardAccent ?? Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text(
-                  'Vista Previa del Estilo',
+                  'Dinero Libre Disponible',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: themeColors?.heroCardText ?? Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -159,22 +184,38 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Saldo de Muestra',
-                      style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black54),
+                      'Soles Libres',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: (themeColors?.heroCardText ?? Colors.white).withAlpha(180),
+                      ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
                       'S/ 4,850.00',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: color,
+                        fontWeight: FontWeight.w800,
+                        color: themeColors?.heroCardAccent ?? Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ],
                 ),
-                FilledButton.tonal(
-                  onPressed: () {},
-                  child: const Text('Botón Muestra'),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: themeColors?.cardBaseBg ?? Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: themeColors?.cardBaseBorder ?? Colors.white24),
+                  ),
+                  child: Text(
+                    'Vista Previa',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: themeColors?.cardAccentText ?? Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -186,16 +227,15 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Apariencia y Estilo'),
+            title: const Text('Apariencia y Estilos'),
           ),
           body: ListView(
             padding: const EdgeInsets.all(16),
@@ -207,26 +247,21 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
                 'Modo de Pantalla',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Actualmente: ${_getModeLabel(_controller.themeMode)}',
-                style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54),
-              ),
-              const SizedBox(height: 12),
-              _buildThemeModeSelector(),
+              const SizedBox(height: 10),
+              _buildThemeModeSelector(isDark),
               const SizedBox(height: 28),
 
               Text(
-                'Paleta de Colores',
+                'Paletas de Color Oficiales',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
               ),
               const SizedBox(height: 4),
               Text(
-                'Elige el color de acento principal de toda la aplicación:',
-                style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54),
+                'Selecciona una de las 4 identidades visuales para toda la aplicación:',
+                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
-              _buildColorPaletteGrid(isDark),
+              _buildPalettesList(isDark),
               const SizedBox(height: 16),
             ],
           ),

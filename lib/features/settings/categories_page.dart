@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/app_themes.dart';
 import '../../repositories/category_repository.dart';
 import '../../repositories/subcategory_repository.dart';
 import '../../services/category_service.dart';
@@ -410,10 +411,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
     setState(() {});
   }
 
-  Widget _buildSubcategoriesList(int categoryId) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
+  Widget _buildSubcategoriesList(int categoryId, AppThemeColors? themeColors) {
     return FutureBuilder<List<Map<String, Object?>>>(
       future: _subcategoryRepository.getByCategory(categoryId),
       builder: (context, snapshot) {
@@ -431,7 +429,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Text(
               'Sin subcategorías agregadas.',
-              style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           );
         }
@@ -446,32 +444,33 @@ class _CategoriesPageState extends State<CategoriesPage> {
               final subName = sub['name']?.toString() ?? '';
 
               return Chip(
-                backgroundColor: colorScheme.surfaceContainerHighest,
-                side: BorderSide(color: colorScheme.outlineVariant),
+                backgroundColor: themeColors?.pillBg,
+                side: BorderSide(color: themeColors?.pillBorder ?? Colors.transparent),
                 label: Text(
                   subName,
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurface),
+                  style: TextStyle(fontSize: 12, color: themeColors?.pillText),
                 ),
-                deleteIcon: Icon(Icons.more_horiz, size: 16, color: colorScheme.onSurfaceVariant),
+                deleteIcon: Icon(Icons.more_horiz, size: 16, color: themeColors?.cardAccentText),
                 onDeleted: () {
                   showModalBottomSheet(
                     context: context,
+                    backgroundColor: themeColors?.cardBaseBg,
                     builder: (sheetContext) {
                       return SafeArea(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             ListTile(
-                              leading: const Icon(Icons.edit),
-                              title: Text('Editar "$subName"'),
+                              leading: Icon(Icons.edit, color: themeColors?.cardAccentText),
+                              title: Text('Editar "$subName"', style: TextStyle(color: themeColors?.cardBaseText)),
                               onTap: () {
                                 Navigator.of(sheetContext).pop();
                                 _editSubcategory(subId, subName);
                               },
                             ),
                             ListTile(
-                              leading: const Icon(Icons.delete_outline, color: Colors.red),
-                              title: Text('Eliminar "$subName"', style: const TextStyle(color: Colors.red)),
+                              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              title: Text('Eliminar "$subName"', style: const TextStyle(color: Colors.redAccent)),
                               onTap: () {
                                 Navigator.of(sheetContext).pop();
                                 _handleDeleteSubcategory(subId, subName);
@@ -491,39 +490,64 @@ class _CategoriesPageState extends State<CategoriesPage> {
     );
   }
 
-  Widget _buildFilterSelector() {
-    return SegmentedButton<String>(
-      segments: [
-        ButtonSegment(
-          value: 'all',
-          label: Text('Todas (${_categories.length})'),
-        ),
-        ButtonSegment(
-          value: 'expense',
-          label: Text('Gastos (${_categories.where((c) => c['type'] == 'expense').length})'),
-          icon: const Icon(Icons.arrow_upward, size: 16, color: Colors.redAccent),
-        ),
-        ButtonSegment(
-          value: 'income',
-          label: Text('Ingresos (${_categories.where((c) => c['type'] == 'income').length})'),
-          icon: const Icon(Icons.arrow_downward, size: 16, color: Colors.green),
-        ),
-      ],
-      selected: {_filterType},
-      onSelectionChanged: (selection) {
-        if (selection.isEmpty) return;
+  Widget _buildFilterPill(String type, String label, AppThemeColors? themeColors) {
+    final isSelected = _filterType == type;
+
+    return GestureDetector(
+      onTap: () {
         setState(() {
-          _filterType = selection.first;
+          _filterType = type;
         });
       },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (themeColors?.cardAccentText ?? Colors.amber)
+              : (themeColors?.cardBaseBg ?? Colors.white12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected
+                ? Colors.transparent
+                : (themeColors?.cardBaseBorder ?? Colors.white24),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: isSelected
+                ? (themeColors?.navBg ?? Colors.black)
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterRow(AppThemeColors? themeColors) {
+    final expenseCount = _categories.where((c) => c['type'] == 'expense').length;
+    final incomeCount = _categories.where((c) => c['type'] == 'income').length;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildFilterPill('all', '✓ Todas (${_categories.length})', themeColors),
+          const SizedBox(width: 8),
+          _buildFilterPill('expense', '↑ Gastos ($expenseCount)', themeColors),
+          const SizedBox(width: 8),
+          _buildFilterPill('income', '↓ Ingresos ($incomeCount)', themeColors),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
     final filtered = _filteredCategories;
 
     return Scaffold(
@@ -531,6 +555,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
         title: const Text('Categorías'),
         actions: [
           PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant),
             onSelected: (value) {
               if (value == 'inactive') {
                 _showInactiveCategories();
@@ -553,15 +578,16 @@ class _CategoriesPageState extends State<CategoriesPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _buildFilterSelector(),
-                const SizedBox(height: 16),
+                _buildFilterRow(themeColors),
+                const SizedBox(height: 14),
 
                 if (filtered.isEmpty)
                   Card(
                     elevation: 0,
+                    color: themeColors?.cardBaseBg,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: colorScheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(18),
+                      side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(32),
@@ -581,17 +607,26 @@ class _CategoriesPageState extends State<CategoriesPage> {
                     final type = category['type']?.toString() ?? '';
                     final isIncome = type == 'income';
 
-                    // Tarjeta de Ingreso
+                    // Tarjeta de Ingreso (Monocromática oficial)
                     if (isIncome) {
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        color: themeColors?.cardBaseBg,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                        ),
                         child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isDark ? Colors.green.shade900.withAlpha(100) : Colors.green.shade50,
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: themeColors?.pillBg,
+                              shape: BoxShape.circle,
+                            ),
                             child: Icon(
                               Icons.arrow_downward,
-                              color: isDark ? Colors.greenAccent : Colors.green,
+                              color: themeColors?.cardAccentText ?? colorScheme.primary,
                               size: 20,
                             ),
                           ),
@@ -600,7 +635,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
-                              color: colorScheme.onSurface,
+                              color: themeColors?.cardBaseText ?? colorScheme.onSurface,
                             ),
                           ),
                           subtitle: Text(
@@ -608,6 +643,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                             style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                           ),
                           trailing: PopupMenuButton<String>(
+                            icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant),
                             onSelected: (value) {
                               if (value == 'edit') {
                                 _editCategory(id, name, type);
@@ -627,7 +663,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                                 value: 'delete',
                                 child: ListTile(
                                   leading: Icon(Icons.delete_outline, color: Colors.red),
-                                  title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                                  title: Text('Eliminar'),
                                 ),
                               ),
                             ],
@@ -636,16 +672,25 @@ class _CategoriesPageState extends State<CategoriesPage> {
                       );
                     }
 
-                    // Tarjeta de Gasto
+                    // Tarjeta de Gasto (Monocromática oficial)
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      color: themeColors?.cardBaseBg,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                      ),
                       child: ExpansionTile(
-                        leading: CircleAvatar(
-                          backgroundColor: isDark ? Colors.red.shade900.withAlpha(100) : Colors.red.shade50,
+                        leading: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: themeColors?.pillBg,
+                            shape: BoxShape.circle,
+                          ),
                           child: Icon(
                             Icons.arrow_upward,
-                            color: isDark ? Colors.redAccent.shade100 : Colors.redAccent,
+                            color: themeColors?.cardAccentText ?? colorScheme.primary,
                             size: 20,
                           ),
                         ),
@@ -654,7 +699,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
-                            color: colorScheme.onSurface,
+                            color: themeColors?.cardBaseText ?? colorScheme.onSurface,
                           ),
                         ),
                         subtitle: Text(
@@ -662,6 +707,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                           style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                         ),
                         trailing: PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant),
                           onSelected: (value) {
                             if (value == 'edit') {
                               _editCategory(id, name, type);
@@ -683,7 +729,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                               value: 'delete',
                               child: ListTile(
                                 leading: Icon(Icons.delete_outline, color: Colors.red),
-                                title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                                title: Text('Eliminar'),
                               ),
                             ),
                             PopupMenuItem(
@@ -696,16 +742,19 @@ class _CategoriesPageState extends State<CategoriesPage> {
                           ],
                         ),
                         children: [
-                          _buildSubcategoriesList(id),
+                          _buildSubcategoriesList(id, themeColors),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: OutlinedButton.icon(
                                 onPressed: () => _createSubcategory(id, name),
-                                icon: const Icon(Icons.add, size: 16),
-                                label: const Text('Nueva subcategoría'),
-                                style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                                icon: Icon(Icons.add, size: 16, color: themeColors?.cardAccentText),
+                                label: Text('Nueva subcategoría', style: TextStyle(color: themeColors?.cardAccentText)),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  side: BorderSide(color: themeColors?.pillBorder ?? Colors.white24),
+                                ),
                               ),
                             ),
                           ),
@@ -788,8 +837,8 @@ class _InactiveCategoriesPageState extends State<_InactiveCategoriesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Categorías desactivadas')),
@@ -814,9 +863,14 @@ class _InactiveCategoriesPageState extends State<_InactiveCategoriesPage> {
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
+                  color: themeColors?.cardBaseBg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                  ),
                   child: ListTile(
-                    leading: const Icon(Icons.folder_off_outlined),
-                    title: Text(name, style: TextStyle(color: colorScheme.onSurface)),
+                    leading: Icon(Icons.folder_off_outlined, color: themeColors?.cardAccentText),
+                    title: Text(name, style: TextStyle(color: themeColors?.cardBaseText)),
                     subtitle: Text('$typeLabel · Desactivada', style: TextStyle(color: colorScheme.onSurfaceVariant)),
                     trailing: FilledButton.tonal(
                       onPressed: () => _reactivateCategory(id, name),
@@ -897,8 +951,8 @@ class _InactiveSubcategoriesPageState extends State<_InactiveSubcategoriesPage> 
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: Text('Subcategorías desactivadas — ${widget.categoryName}')),
@@ -921,9 +975,14 @@ class _InactiveSubcategoriesPageState extends State<_InactiveSubcategoriesPage> 
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
+                  color: themeColors?.cardBaseBg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+                  ),
                   child: ListTile(
-                    leading: const Icon(Icons.subdirectory_arrow_right),
-                    title: Text(name, style: TextStyle(color: colorScheme.onSurface)),
+                    leading: Icon(Icons.subdirectory_arrow_right, color: themeColors?.cardAccentText),
+                    title: Text(name, style: TextStyle(color: themeColors?.cardBaseText)),
                     subtitle: Text(widget.categoryName, style: TextStyle(color: colorScheme.onSurfaceVariant)),
                     trailing: FilledButton.tonal(
                       onPressed: () => _reactivateSubcategory(id, name),
