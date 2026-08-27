@@ -7,8 +7,11 @@ import 'package:flutter/material.dart';
 import '../../core/app_themes.dart';
 import '../../models/debt.dart';
 import '../../models/person_owed.dart';
+import '../../models/planned_purchase.dart';
 import '../../repositories/debt_repository.dart';
 import '../../repositories/people_owed_repository.dart';
+import '../../repositories/planned_purchase_repository.dart';
+import '../transactions/create_transaction_page.dart';
 import 'debt_detail_page.dart';
 
 class DebtsPage extends StatefulWidget {
@@ -21,18 +24,23 @@ class DebtsPage extends StatefulWidget {
 class _DebtsPageState extends State<DebtsPage> {
   final _debtRepository = DebtRepository();
   final _peopleOwedRepository = PeopleOwedRepository();
+  final _plannedPurchaseRepository = PlannedPurchaseRepository();
 
   bool _loading = true;
   String _selectedSection = 'debts';
 
   List<Map<String, Object?>> _debts = [];
   List<PersonOwed> _peopleOwed = [];
+  List<PlannedPurchase> _plannedPurchases = [];
 
   int _pendingDebtsPEN = 0;
   int _pendingDebtsUSD = 0;
 
   int _owedToMePEN = 0;
   int _owedToMeUSD = 0;
+
+  int _plannedPEN = 0;
+  int _plannedUSD = 0;
 
   @override
   void initState() {
@@ -43,18 +51,28 @@ class _DebtsPageState extends State<DebtsPage> {
   Future<void> _loadData() async {
     final debts = await _debtRepository.getActiveDebtsWithProgress();
     final people = await _peopleOwedRepository.getActive();
+    final planned = await _plannedPurchaseRepository.getActive();
+
     final debtTotals = await _debtRepository.getTotalPendingDebtsByCurrency();
     final peopleTotals = await _peopleOwedRepository.getTotalOwedToMeByCurrency();
+    final plannedTotals = await _plannedPurchaseRepository.getTotalEstimatedByCurrency();
 
     if (!mounted) return;
 
     setState(() {
       _debts = debts;
       _peopleOwed = people;
+      _plannedPurchases = planned;
+
       _pendingDebtsPEN = debtTotals['PEN'] ?? 0;
       _pendingDebtsUSD = debtTotals['USD'] ?? 0;
+
       _owedToMePEN = peopleTotals['PEN'] ?? 0;
       _owedToMeUSD = peopleTotals['USD'] ?? 0;
+
+      _plannedPEN = plannedTotals['PEN'] ?? 0;
+      _plannedUSD = plannedTotals['USD'] ?? 0;
+
       _loading = false;
     });
   }
@@ -95,6 +113,7 @@ class _DebtsPageState extends State<DebtsPage> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: currency,
                       decoration: const InputDecoration(
                         labelText: 'Moneda',
@@ -188,6 +207,7 @@ class _DebtsPageState extends State<DebtsPage> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: currency,
                       decoration: const InputDecoration(
                         labelText: 'Moneda',
@@ -264,6 +284,309 @@ class _DebtsPageState extends State<DebtsPage> {
     }
   }
 
+  Future<void> _createPlannedPurchase() async {
+    final nameController = TextEditingController();
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    String currency = 'PEN';
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Nueva Compra Planeada'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: '¿Qué vas a comprar? *',
+                        hintText: 'Ej. Manillar de bicicleta',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: currency,
+                      decoration: const InputDecoration(
+                        labelText: 'Moneda',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'PEN', child: Text('Soles (PEN)')),
+                        DropdownMenuItem(value: 'USD', child: Text('Dólares (USD)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => currency = val);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Precio estimado / fijo *',
+                        hintText: '0.00',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: noteController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Nota / Detalle (opcional)',
+                        hintText: 'Ej. Tienda Bike Perú',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true && mounted) {
+      final name = nameController.text.trim();
+      final amt = (double.tryParse(amountController.text.replaceAll(',', '.')) ?? 0) * 100;
+      final note = noteController.text.trim();
+
+      if (name.isNotEmpty && amt > 0) {
+        await _plannedPurchaseRepository.insert(
+          PlannedPurchase(
+            name: name,
+            amount: amt.round(),
+            currency: currency,
+            note: note.isEmpty ? null : note,
+          ),
+        );
+        await _loadData();
+      }
+    }
+  }
+
+  Future<void> _editPersonOwed(PersonOwed p) async {
+    final nameController = TextEditingController(text: p.name);
+    final amountController = TextEditingController(
+      text: (p.amount / 100).toStringAsFixed(2),
+    );
+    final noteController = TextEditingController(text: p.note ?? '');
+    String currency = p.currency;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Editar Deuda / Préstamo'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre de la persona *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: currency,
+                      decoration: const InputDecoration(
+                        labelText: 'Moneda',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'PEN', child: Text('Soles (PEN)')),
+                        DropdownMenuItem(value: 'USD', child: Text('Dólares (USD)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => currency = val);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Monto que me debe *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: noteController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Nota / Motivo (opcional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true && mounted) {
+      final name = nameController.text.trim();
+      final amt = (double.tryParse(amountController.text.replaceAll(',', '.')) ?? 0) * 100;
+      final note = noteController.text.trim();
+
+      if (name.isNotEmpty && amt > 0) {
+        await _peopleOwedRepository.update(
+          PersonOwed(
+            id: p.id,
+            name: name,
+            amount: amt.round(),
+            currency: currency,
+            note: note.isEmpty ? null : note,
+            date: p.date,
+            active: p.active,
+          ),
+        );
+        await _loadData();
+      }
+    }
+  }
+
+  Future<void> _editPlannedPurchase(PlannedPurchase item) async {
+    final nameController = TextEditingController(text: item.name);
+    final amountController = TextEditingController(
+      text: (item.amount / 100).toStringAsFixed(2),
+    );
+    final noteController = TextEditingController(text: item.note ?? '');
+    String currency = item.currency;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Editar Compra Planeada'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: '¿Qué vas a comprar? *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: currency,
+                      decoration: const InputDecoration(
+                        labelText: 'Moneda',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'PEN', child: Text('Soles (PEN)')),
+                        DropdownMenuItem(value: 'USD', child: Text('Dólares (USD)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => currency = val);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Precio estimado *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: noteController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Nota / Detalle (opcional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true && mounted) {
+      final name = nameController.text.trim();
+      final amt = (double.tryParse(amountController.text.replaceAll(',', '.')) ?? 0) * 100;
+      final note = noteController.text.trim();
+
+      if (name.isNotEmpty && amt > 0) {
+        await _plannedPurchaseRepository.update(
+          PlannedPurchase(
+            id: item.id,
+            name: name,
+            amount: amt.round(),
+            currency: currency,
+            note: note.isEmpty ? null : note,
+            active: item.active,
+          ),
+        );
+        await _loadData();
+      }
+    }
+  }
+
   Future<void> _deletePersonOwed(PersonOwed p) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -291,11 +614,76 @@ class _DebtsPageState extends State<DebtsPage> {
     }
   }
 
+  Future<void> _deletePlannedPurchase(PlannedPurchase item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Eliminar compra planeada'),
+          content: Text('¿Deseas eliminar "${item.name}" de tus compras planeadas?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      await _plannedPurchaseRepository.delete(item.id!);
+      await _loadData();
+    }
+  }
+
+  /// EJECUCIÓN DIRECTA DE COMPRA:
+  /// Abre CreateTransactionPage con el nombre y monto autollenados y el tipo bloqueado como Gasto
+  Future<void> _executePurchase(PlannedPurchase item) async {
+    final bought = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CreateTransactionPage(
+          initialType: 'expense',
+          initialDescription: item.name,
+          initialAmount: item.amount,
+          lockType: true, // 👈 Bloquea el selector de tipo para enfocar solo en pagar
+        ),
+      ),
+    );
+
+    if (bought == true && mounted) {
+      await _plannedPurchaseRepository.delete(item.id!);
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('¡"${item.name}" comprado y registrado como gasto real!')),
+      );
+    }
+  }
+
   Widget _buildSummaryHeader(AppThemeColors? themeColors) {
-    final isDebts = _selectedSection == 'debts';
-    final title = isDebts ? 'Total Pendiente por Pagar' : 'Total por Cobrar a Favor';
-    final pen = isDebts ? _pendingDebtsPEN : _owedToMePEN;
-    final usd = isDebts ? _pendingDebtsUSD : _owedToMeUSD;
+    String title;
+    int pen;
+    int usd;
+
+    if (_selectedSection == 'debts') {
+      title = 'Total Pendiente por Pagar';
+      pen = _pendingDebtsPEN;
+      usd = _pendingDebtsUSD;
+    } else if (_selectedSection == 'people') {
+      title = 'Total por Cobrar a Favor';
+      pen = _owedToMePEN;
+      usd = _owedToMeUSD;
+    } else {
+      title = 'Total Proyectado por Comprar';
+      pen = _plannedPEN;
+      usd = _plannedUSD;
+    }
 
     return Card(
       elevation: 3,
@@ -312,7 +700,9 @@ class _DebtsPageState extends State<DebtsPage> {
             Row(
               children: [
                 Icon(
-                  isDebts ? Icons.credit_card_off : Icons.volunteer_activism,
+                  _selectedSection == 'debts'
+                      ? Icons.credit_card_off
+                      : (_selectedSection == 'people' ? Icons.volunteer_activism : Icons.shopping_bag_outlined),
                   color: themeColors?.heroCardAccent ?? Theme.of(context).colorScheme.primary,
                   size: 20,
                 ),
@@ -394,13 +784,18 @@ class _DebtsPageState extends State<DebtsPage> {
       segments: [
         ButtonSegment(
           value: 'debts',
-          label: const Text('Debo Yo (Deudas)', style: TextStyle(fontSize: 12)),
-          icon: Icon(Icons.arrow_upward, size: 14, color: themeColors?.cardAccentText),
+          label: const Text('Debo Yo', style: TextStyle(fontSize: 11)),
+          icon: Icon(Icons.arrow_upward, size: 13, color: themeColors?.cardAccentText),
         ),
         ButtonSegment(
           value: 'people',
-          label: const Text('Me Deben (Préstamos)', style: TextStyle(fontSize: 12)),
-          icon: Icon(Icons.arrow_downward, size: 14, color: themeColors?.cardAccentText),
+          label: const Text('Me Deben', style: TextStyle(fontSize: 11)),
+          icon: Icon(Icons.arrow_downward, size: 13, color: themeColors?.cardAccentText),
+        ),
+        ButtonSegment(
+          value: 'planned',
+          label: const Text('Por Comprar', style: TextStyle(fontSize: 11)),
+          icon: Icon(Icons.shopping_bag_outlined, size: 13, color: themeColors?.cardAccentText),
         ),
       ],
       selected: {_selectedSection},
@@ -532,7 +927,6 @@ class _DebtsPageState extends State<DebtsPage> {
                     ],
                   ),
                   const SizedBox(height: 14),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -565,7 +959,6 @@ class _DebtsPageState extends State<DebtsPage> {
                     ],
                   ),
                   const SizedBox(height: 10),
-
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: LinearProgressIndicator(
@@ -578,7 +971,6 @@ class _DebtsPageState extends State<DebtsPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -638,44 +1030,178 @@ class _DebtsPageState extends State<DebtsPage> {
             borderRadius: BorderRadius.circular(18),
             side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
           ),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: themeColors?.pillBg,
-              child: Text(
-                p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: themeColors?.cardAccentText ?? colorScheme.primary,
-                ),
-              ),
-            ),
-            title: Text(
-              p.name,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: themeColors?.cardBaseText ?? colorScheme.onSurface,
-              ),
-            ),
-            subtitle: Text(
-              p.note?.isNotEmpty == true ? '${p.date} · ${p.note!}' : p.date,
-              style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatAmount(p.amount, p.currency),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => _editPersonOwed(p),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: themeColors?.pillBg,
+                child: Text(
+                  p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.bold,
                     color: themeColors?.cardAccentText ?? colorScheme.primary,
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.check_circle_outline, color: themeColors?.cardAccentText),
-                  tooltip: 'Marcar como cobrado',
-                  onPressed: () => _deletePersonOwed(p),
+              ),
+              title: Text(
+                p.name,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                ),
+              ),
+              subtitle: Text(
+                p.note?.isNotEmpty == true ? '${p.date} · ${p.note!}' : p.date,
+                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _formatAmount(p.amount, p.currency),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: themeColors?.cardAccentText ?? colorScheme.primary,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.edit_outlined, color: colorScheme.onSurfaceVariant, size: 20),
+                    tooltip: 'Editar préstamo',
+                    onPressed: () => _editPersonOwed(p),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.check_circle_outline, color: themeColors?.cardAccentText),
+                    tooltip: 'Marcar como cobrado / Eliminar',
+                    onPressed: () => _deletePersonOwed(p),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildPlannedPurchasesList(AppThemeColors? themeColors) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (_plannedPurchases.isEmpty) {
+      return Card(
+        elevation: 0,
+        color: themeColors?.cardBaseBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Center(
+            child: Text(
+              'No tienes compras planeadas registradas.\nAgrega aquí las cosas con precio fijo que planeas comprar cuando tengas el dinero.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: _plannedPurchases.map((item) {
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          color: themeColors?.cardBaseBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: themeColors?.pillBg,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.shopping_bag_outlined,
+                        color: themeColors?.cardAccentText ?? colorScheme.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                            ),
+                          ),
+                          if (item.note?.isNotEmpty == true)
+                            Text(
+                              item.note!,
+                              style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                            ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant),
+                      onSelected: (val) {
+                        if (val == 'edit') _editPlannedPurchase(item);
+                        if (val == 'delete') _deletePlannedPurchase(item);
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Eliminar', style: TextStyle(color: Colors.red))),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Precio Estimado', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                        Text(
+                          _formatAmount(item.amount, item.currency),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: themeColors?.cardAccentText ?? colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    FilledButton.icon(
+                      onPressed: () => _executePurchase(item),
+                      icon: const Icon(Icons.shopping_cart_checkout, size: 16),
+                      label: const Text('Comprar ahora'),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: themeColors?.fabBg ?? colorScheme.primary,
+                        foregroundColor: themeColors?.fabText ?? Colors.black,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -689,9 +1215,23 @@ class _DebtsPageState extends State<DebtsPage> {
   Widget build(BuildContext context) {
     final themeColors = Theme.of(context).extension<AppThemeColors>();
 
+    String fabLabel;
+    VoidCallback fabAction;
+
+    if (_selectedSection == 'debts') {
+      fabLabel = 'Nueva deuda';
+      fabAction = _createDebt;
+    } else if (_selectedSection == 'people') {
+      fabLabel = 'Nuevo préstamo';
+      fabAction = _createPersonOwed;
+    } else {
+      fabLabel = 'Planeada';
+      fabAction = _createPlannedPurchase;
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Deudas y Préstamos'),
+        title: const Text('Compromisos y Metas'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -704,14 +1244,19 @@ class _DebtsPageState extends State<DebtsPage> {
                   const SizedBox(height: 16),
                   _buildSectionSwitcher(themeColors),
                   const SizedBox(height: 16),
-                  if (_selectedSection == 'debts') _buildDebtsList(themeColors) else _buildPeopleOwedList(themeColors),
+                  if (_selectedSection == 'debts')
+                    _buildDebtsList(themeColors)
+                  else if (_selectedSection == 'people')
+                    _buildPeopleOwedList(themeColors)
+                  else
+                    _buildPlannedPurchasesList(themeColors),
                 ],
               ),
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _selectedSection == 'debts' ? _createDebt : _createPersonOwed,
+        onPressed: fabAction,
         icon: const Icon(Icons.add),
-        label: Text(_selectedSection == 'debts' ? 'Nueva deuda' : 'Nuevo préstamo'),
+        label: Text(fabLabel),
       ),
     );
   }

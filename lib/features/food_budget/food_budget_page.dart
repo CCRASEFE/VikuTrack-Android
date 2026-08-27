@@ -5,7 +5,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_themes.dart';
-import '../../models/food_budget_day.dart';
 import '../../repositories/food_budget_repository.dart';
 import '../transactions/create_transaction_page.dart';
 import '../transactions/edit_transaction_page.dart';
@@ -23,10 +22,13 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
   bool _loading = true;
   late DateTime _selectedDate;
 
-  late FoodBudgetDay _currentBudgetDay;
+  int _baseLimit = 0;
+  int _autoAdjustment = 0;
+  int _effectiveLimit = 0;
   int _spentToday = 0;
-  List<Map<String, Object?>> _foodTransactions = [];
+  int _remainingToday = 0;
 
+  List<Map<String, Object?>> _foodTransactions = [];
   List<_DaySummary> _recentDays = [];
 
   @override
@@ -44,30 +46,31 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
   }
 
   Future<void> _loadData() async {
+    final calculation = await _repository.getDayCalculation(_selectedDate);
     final dateIso = _formatDateToIso(_selectedDate);
-
-    final budgetDay = await _repository.getDay(dateIso);
-    final spent = await _repository.getFoodSpendingByDate(dateIso);
     final transactions = await _repository.getFoodTransactionsByDate(dateIso);
 
     final recent = <_DaySummary>[];
     for (int i = 0; i < 7; i++) {
       final d = _selectedDate.subtract(Duration(days: i));
-      final dIso = _formatDateToIso(d);
-      final b = await _repository.getDay(dIso);
-      final s = await _repository.getFoodSpendingByDate(dIso);
+      final calc = await _repository.getDayCalculation(d);
       recent.add(_DaySummary(
         date: d,
-        limit: b.dailyLimit + b.adjustment,
-        spent: s,
+        effectiveLimit: calc['effectiveLimit'] ?? 0,
+        spent: calc['spent'] ?? 0,
+        remaining: calc['remaining'] ?? 0,
       ));
     }
 
     if (!mounted) return;
 
     setState(() {
-      _currentBudgetDay = budgetDay;
-      _spentToday = spent;
+      _baseLimit = calculation['baseLimit'] ?? 0;
+      _autoAdjustment = calculation['autoAdjustment'] ?? 0;
+      _effectiveLimit = calculation['effectiveLimit'] ?? 0;
+      _spentToday = calculation['spent'] ?? 0;
+      _remainingToday = calculation['remaining'] ?? 0;
+
       _foodTransactions = transactions;
       _recentDays = recent;
       _loading = false;
@@ -106,38 +109,60 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
     return isToday ? 'Hoy ($dateStr)' : dateStr;
   }
 
-  Future<void> _editDayBudget() async {
+  Future<void> _editDayBaseLimit() async {
     final limitController = TextEditingController(
-      text: (_currentBudgetDay.dailyLimit / 100).toStringAsFixed(2),
-    );
-    final adjustmentController = TextEditingController(
-      text: (_currentBudgetDay.adjustment / 100).toStringAsFixed(2),
+      text: _baseLimit > 0 ? (_baseLimit / 100).toStringAsFixed(2) : '',
     );
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
+        final themeColors = Theme.of(context).extension<AppThemeColors>();
+
         return AlertDialog(
-          title: const Text('Presupuesto de Alimentación'),
+          title: const Text('Presupuesto del Día'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextField(
                 controller: limitController,
+                autofocus: true,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
-                  labelText: 'Límite para este día (S/)',
+                  labelText: 'Límite Base para este día (S/)',
+                  hintText: '0.00',
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: adjustmentController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                decoration: const InputDecoration(
-                  labelText: 'Ajuste / Extra (S/)',
-                  hintText: 'Ej. 5.00 o -10.00',
-                  border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: themeColors?.pillBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _autoAdjustment >= 0 ? Icons.trending_up : Icons.trending_down,
+                      size: 16,
+                      color: _autoAdjustment >= 0 ? Colors.green : Colors.redAccent,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _autoAdjustment >= 0
+                            ? 'Ajuste automático de ayer: +${_formatAmount(_autoAdjustment)}'
+                            : 'Ajuste automático de ayer: -${_formatAmount(_autoAdjustment.abs())}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _autoAdjustment >= 0 ? Colors.green : Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -157,13 +182,14 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
     );
 
     if (saved == true && mounted) {
-      final lim = (double.tryParse(limitController.text.replaceAll(',', '.')) ?? 0) * 100;
-      final adj = (double.tryParse(adjustmentController.text.replaceAll(',', '.')) ?? 0) * 100;
+      final text = limitController.text.trim();
+      final lim = text.isEmpty
+          ? 0.0
+          : ((double.tryParse(text.replaceAll(',', '.')) ?? 0) * 100);
 
-      await _repository.saveDay(
+      await _repository.saveDayBaseLimit(
         date: _formatDateToIso(_selectedDate),
         dailyLimit: lim.round(),
-        adjustment: adj.round(),
       );
 
       await _loadData();
@@ -176,7 +202,7 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
     if (!mounted) return;
 
     final controller = TextEditingController(
-      text: (currentDefault / 100).toStringAsFixed(2),
+      text: currentDefault > 0 ? (currentDefault / 100).toStringAsFixed(2) : '',
     );
 
     final saved = await showDialog<bool>(
@@ -188,7 +214,7 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Este monto se usará por defecto para todos los días que no configures individualmente.',
+                'Si lo dejas en 0.00, los días que no uses la app no acumularán ajustes automáticos.',
                 style: TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 16),
@@ -196,7 +222,8 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
                 controller: controller,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
-                  labelText: 'Límite diario por defecto (S/)',
+                  labelText: 'Límite base estándar (S/)',
+                  hintText: '0.00',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -217,7 +244,11 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
     );
 
     if (saved == true && mounted) {
-      final lim = (double.tryParse(controller.text.replaceAll(',', '.')) ?? 0) * 100;
+      final text = controller.text.trim();
+      final lim = text.isEmpty
+          ? 0.0
+          : ((double.tryParse(text.replaceAll(',', '.')) ?? 0) * 100);
+
       await _repository.setDefaultDailyLimit(lim.round());
       await _loadData();
     }
@@ -225,10 +256,10 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
 
   Widget _buildDailyStatusCard(AppThemeColors? themeColors) {
     final colorScheme = Theme.of(context).colorScheme;
-    final effectiveLimit = _currentBudgetDay.dailyLimit + _currentBudgetDay.adjustment;
-    final remaining = effectiveLimit - _spentToday;
-    final progress = effectiveLimit > 0 ? (_spentToday / effectiveLimit).clamp(0.0, 1.0) : 0.0;
-    final isExceeded = remaining < 0;
+    final isExceeded = _remainingToday < 0 || (_effectiveLimit == 0 && _spentToday > 0);
+    final progress = _effectiveLimit > 0
+        ? (_spentToday / _effectiveLimit).clamp(0.0, 1.0)
+        : (_spentToday > 0 ? 1.0 : 0.0);
 
     return Card(
       elevation: 2,
@@ -276,7 +307,7 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              _formatAmount(remaining.abs()),
+              _formatAmount(_remainingToday.abs()),
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
@@ -302,34 +333,39 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Límite + Ajuste', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                    Text('Límite Base', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
                     Text(
-                      _formatAmount(effectiveLimit),
+                      _formatAmount(_baseLimit),
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: themeColors?.cardBaseText ?? colorScheme.onSurface,
                       ),
                     ),
                   ],
                 ),
-                OutlinedButton.icon(
-                  onPressed: _editDayBudget,
-                  icon: Icon(Icons.tune, size: 16, color: themeColors?.btnColor),
-                  label: Text('Ajustar', style: TextStyle(color: themeColors?.btnColor)),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    side: BorderSide(color: themeColors?.btnBorder ?? Colors.white24),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('Ajuste de Ayer', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      _autoAdjustment >= 0 ? '+${_formatAmount(_autoAdjustment)}' : '-${_formatAmount(_autoAdjustment.abs())}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _autoAdjustment >= 0 ? (themeColors?.cardAccentText ?? Colors.green) : colorScheme.error,
+                      ),
+                    ),
+                  ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('Gastado en Comida', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                    Text('Gastado Hoy', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
                     Text(
                       _formatAmount(_spentToday),
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: colorScheme.error,
                       ),
@@ -337,6 +373,19 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
                   ],
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.center,
+              child: OutlinedButton.icon(
+                onPressed: _editDayBaseLimit,
+                icon: Icon(Icons.tune, size: 16, color: themeColors?.btnColor),
+                label: Text('Asignar / Modificar Límite', style: TextStyle(color: themeColors?.btnColor, fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide(color: themeColors?.btnBorder ?? Colors.white24),
+                ),
+              ),
             ),
           ],
         ),
@@ -372,8 +421,7 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
               const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
               final dayName = days[d.date.weekday % 7];
               final dateStr = '$dayName ${d.date.day}';
-              final rem = d.limit - d.spent;
-              final isOk = rem >= 0;
+              final isOk = d.remaining >= 0;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -392,7 +440,7 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
                     ),
                     Expanded(
                       child: Text(
-                        'Gastó ${_formatAmount(d.spent)} de ${_formatAmount(d.limit)}',
+                        'Gastó ${_formatAmount(d.spent)} de ${_formatAmount(d.effectiveLimit)}',
                         style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                       ),
                     ),
@@ -404,7 +452,7 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
                         border: Border.all(color: themeColors?.pillBorder ?? Colors.transparent),
                       ),
                       child: Text(
-                        isOk ? '+${_formatAmount(rem)}' : '-${_formatAmount(rem.abs())}',
+                        isOk ? '+${_formatAmount(d.remaining)}' : '-${_formatAmount(d.remaining.abs())}',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -573,12 +621,14 @@ class _FoodBudgetPageState extends State<FoodBudgetPage> {
 
 class _DaySummary {
   final DateTime date;
-  final int limit;
+  final int effectiveLimit;
   final int spent;
+  final int remaining;
 
   const _DaySummary({
     required this.date,
-    required this.limit,
+    required this.effectiveLimit,
     required this.spent,
+    required this.remaining,
   });
 }

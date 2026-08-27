@@ -11,7 +11,7 @@ class TransactionRepository {
     final now = DateTime.now().toIso8601String();
 
     return db.insert('transactions', {
-      'type': transaction.type.name,
+      'type': transaction.type.dbValue,
       'date': transaction.date.toIso8601String().split('T').first,
       'time': transaction.date
           .toIso8601String()
@@ -54,7 +54,6 @@ class TransactionRepository {
     );
   }
 
-  /// Obtiene todas las operaciones activas con sus detalles completos (monto, moneda, categoría y cuenta)
   Future<List<Map<String, Object?>>> getAllWithDetails({String? typeFilter}) async {
     final db = await DatabaseHelper.database;
 
@@ -245,7 +244,7 @@ class TransactionRepository {
     await db.update(
       'transactions',
       {
-        'type': transaction.type.name,
+        'type': transaction.type.dbValue,
         'date': transaction.date.toIso8601String().split('T').first,
         'time': transaction.date
             .toIso8601String()
@@ -309,10 +308,9 @@ class TransactionRepository {
   Future<void> delete(int id) async {
     final db = await DatabaseHelper.database;
 
-    await db.delete(
-      'transactions',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.transaction((txn) async {
+      await txn.delete('debt_payments', where: 'transaction_id = ?', whereArgs: [id]);
+      await txn.delete('transactions', where: 'id = ?', whereArgs: [id]);
+    });
   }
 }

@@ -13,10 +13,16 @@ import '../../services/transaction_service.dart';
 
 class CreateTransactionPage extends StatefulWidget {
   final String initialType;
+  final String? initialDescription;
+  final int? initialAmount;
+  final bool lockType;
 
   const CreateTransactionPage({
     super.key,
     this.initialType = 'expense',
+    this.initialDescription,
+    this.initialAmount,
+    this.lockType = false,
   });
 
   @override
@@ -49,11 +55,9 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   int? _selectedCategoryId;
   int? _selectedSubcategoryId;
 
-  // Para Gasto e Ingreso
   int? _selectedAccountId;
   int? _selectedPaymentMethodId;
 
-  // Para Transferencia
   int? _selectedOriginAccountId;
   int? _selectedDestinationAccountId;
 
@@ -61,6 +65,15 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   void initState() {
     super.initState();
     _type = widget.initialType;
+
+    if (widget.initialDescription != null && widget.initialDescription!.isNotEmpty) {
+      _descriptionController.text = widget.initialDescription!;
+    }
+
+    if (widget.initialAmount != null && widget.initialAmount! > 0) {
+      _amountController.text = (widget.initialAmount! / 100).toStringAsFixed(2);
+    }
+
     _loadAccounts();
     _loadCategories();
   }
@@ -125,7 +138,9 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
           'name': account.name,
           'currency': account.currency,
           'type': account.type,
-          'currentBalance': balanceDetails['current'] ?? 0,
+          'freeBalance': balanceDetails['free'] ?? 0,
+          'totalBalance': balanceDetails['total'] ?? 0,
+          'reservedBalance': balanceDetails['reserved'] ?? 0,
         });
       }
     }
@@ -278,13 +293,22 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
     }
 
     final currency = selectedAccount['currency'] as String;
-    final currentBalance = selectedAccount['currentBalance'] as int? ?? 0;
+    final freeBalance = selectedAccount['freeBalance'] as int? ?? 0;
+    final totalBalance = selectedAccount['totalBalance'] as int? ?? 0;
+    final reserved = selectedAccount['reservedBalance'] as int? ?? 0;
 
-    if (amount > currentBalance) {
-      _showMessage(
-        'Fondos insuficientes en "${selectedAccount['name']}": '
-        'Saldo disponible ${_formatAmount(currentBalance, currency)}, intentas gastar ${_formatAmount(amount, currency)}.',
-      );
+    if (amount > freeBalance) {
+      if (reserved > 0) {
+        _showMessage(
+          'Fondos insuficientes en "${selectedAccount['name']}": '
+          'Saldo libre ${_formatAmount(freeBalance, currency)} (Total: ${_formatAmount(totalBalance, currency)}, Reservado: ${_formatAmount(reserved, currency)}) e intentas gastar ${_formatAmount(amount, currency)}.',
+        );
+      } else {
+        _showMessage(
+          'Fondos insuficientes en "${selectedAccount['name']}": '
+          'Saldo disponible ${_formatAmount(freeBalance, currency)}, intentas gastar ${_formatAmount(amount, currency)}.',
+        );
+      }
       return;
     }
 
@@ -365,17 +389,17 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
 
     final originCurrency = originAccount['currency'] as String;
     final destinationCurrency = destinationAccount['currency'] as String;
-    final originBalance = originAccount['currentBalance'] as int? ?? 0;
+    final originFreeBalance = originAccount['freeBalance'] as int? ?? 0;
 
     if (originCurrency != destinationCurrency) {
       _showMessage('La transferencia debe realizarse entre cuentas de la misma moneda.');
       return;
     }
 
-    if (amount > originBalance) {
+    if (amount > originFreeBalance) {
       _showMessage(
-        'Fondos insuficientes en "${originAccount['name']}": '
-        'Saldo disponible ${_formatAmount(originBalance, originCurrency)}, intentas transferir ${_formatAmount(amount, originCurrency)}.',
+        'Fondos insuficientes en cuenta origen "${originAccount['name']}": '
+        'Saldo libre ${_formatAmount(originFreeBalance, originCurrency)}, intentas transferir ${_formatAmount(amount, originCurrency)}.',
       );
       return;
     }
@@ -404,9 +428,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
 
     try {
       final transaction = Transaction(
-        type: TransactionType.values.firstWhere(
-          (value) => value.name == _type,
-        ),
+        type: TransactionType.fromDbValue(_type), // 👈 Mapeo seguro
         amount: amount,
         currency: currency,
         accountId: accountId,
@@ -730,12 +752,14 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
           items: _accounts.map((account) {
             final name = account['name'] as String;
             final currency = account['currency'] as String;
-            final balance = account['currentBalance'] as int? ?? 0;
+            final freeBalance = account['freeBalance'] as int? ?? 0;
 
             return DropdownMenuItem<int>(
               value: account['id'] as int,
               child: Text(
-                '$name ($currency) · Disp: ${_formatAmount(balance, currency)}',
+                _isIncome
+                    ? '$name ($currency)'
+                    : '$name ($currency) · Libre: ${_formatAmount(freeBalance, currency)}',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -809,12 +833,12 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
           items: _accounts.map((account) {
             final name = account['name'] as String;
             final currency = account['currency'] as String;
-            final balance = account['currentBalance'] as int? ?? 0;
+            final freeBalance = account['freeBalance'] as int? ?? 0;
 
             return DropdownMenuItem<int>(
               value: account['id'] as int,
               child: Text(
-                '$name ($currency) · Disp: ${_formatAmount(balance, currency)}',
+                '$name ($currency) · Libre: ${_formatAmount(freeBalance, currency)}',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -840,12 +864,11 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
           items: _accounts.map((account) {
             final name = account['name'] as String;
             final currency = account['currency'] as String;
-            final balance = account['currentBalance'] as int? ?? 0;
 
             return DropdownMenuItem<int>(
               value: account['id'] as int,
               child: Text(
-                '$name ($currency) · Disp: ${_formatAmount(balance, currency)}',
+                '$name ($currency)',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -871,24 +894,26 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nueva operación'),
+        title: Text(widget.lockType ? 'Registrar Compra' : 'Nueva operación'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Tipo de operación',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
+            if (!widget.lockType) ...[
+              Text(
+                'Tipo de operación',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            _buildTypeSelector(),
-            const SizedBox(height: 24),
+              const SizedBox(height: 8),
+              _buildTypeSelector(),
+              const SizedBox(height: 24),
+            ],
             Text(
               'Fecha',
               style: TextStyle(
@@ -913,10 +938,10 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
               textCapitalization: TextCapitalization.sentences,
               maxLines: 2,
               decoration: InputDecoration(
-                labelText: 'Descripción',
+                labelText: 'Descripción / Producto *',
                 hintText: _isIncome
                     ? 'Ej. Pago de quincena o Bonificación'
-                    : 'Ej. Almuerzo menú ejecutivo',
+                    : 'Ej. Manillar de bicicleta o Compra del súper',
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -993,7 +1018,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text('Registrar operación'),
+                    : Text(widget.lockType ? 'Confirmar Compra' : 'Registrar operación'),
               ),
             ),
           ],

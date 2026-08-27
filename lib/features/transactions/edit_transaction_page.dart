@@ -48,15 +48,12 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   List<Map<String, Object?>> _accounts = [];
   List<Map<String, Object?>> _paymentMethods = [];
 
-  // Para Gasto e Ingreso
   int? _selectedCategoryId;
   int? _selectedSubcategoryId;
 
-  // Para Gasto e Ingreso
   int? _selectedAccountId;
   int? _selectedPaymentMethodId;
 
-  // Para Transferencia
   int? _selectedOriginAccountId;
   int? _selectedDestinationAccountId;
 
@@ -76,6 +73,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   bool get _isExpense => _type == 'expense';
   bool get _isIncome => _type == 'income';
   bool get _isTransfer => _type == 'transfer';
+  bool get _isDebtPayment => _type == 'debt_payment';
 
   String _formatAmount(int amountInCents, String currency) {
     final amount = amountInCents / 100;
@@ -147,6 +145,16 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
         if (items.isNotEmpty) {
           categoryId = items.first['category_id'] as int?;
         }
+      } else if (type == 'debt_payment') {
+        if (payments.isEmpty) {
+          _abortWithError('Datos incompletos para el abono de deuda.');
+          return;
+        }
+
+        final payment = payments.first;
+        amount = payment['amount'] as int;
+        paymentMethodId = payment['payment_method_id'] as int;
+        accountId = await _paymentMethodRepository.getAccountId(paymentMethodId);
       } else if (type == 'transfer') {
         if (payments.length < 2) {
           _abortWithError('Datos incompletos para la transferencia.');
@@ -170,7 +178,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
         destinationAccountId = await _paymentMethodRepository.getAccountId(inMethodId);
       }
 
-      if (accountId != null && type == 'expense') {
+      if (accountId != null && (type == 'expense' || type == 'debt_payment')) {
         await _loadPaymentMethods(accountId, keepSelection: true);
       }
 
@@ -219,7 +227,9 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
           'name': account.name,
           'currency': account.currency,
           'type': account.type,
-          'currentBalance': balanceDetails['current'] ?? 0,
+          'freeBalance': balanceDetails['free'] ?? 0,
+          'totalBalance': balanceDetails['total'] ?? 0,
+          'reservedBalance': balanceDetails['reserved'] ?? 0,
         });
       }
     }
@@ -232,7 +242,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   }
 
   Future<void> _loadCategories() async {
-    if (_isTransfer) {
+    if (_isTransfer || _isDebtPayment) {
       if (!mounted) return;
       setState(() {
         _categories = [];
@@ -361,6 +371,8 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
       await _saveIncome(amount);
     } else if (_isTransfer) {
       await _saveTransfer(amount);
+    } else if (_isDebtPayment) {
+      await _saveDebtPayment(amount);
     }
   }
 
@@ -399,6 +411,31 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
           countForFoodControl: _countForFoodControl,
         ),
       ],
+      payments: [
+        TransactionPaymentInput(
+          paymentMethodId: _selectedPaymentMethodId!,
+          amount: amount,
+          direction: 'out',
+        ),
+      ],
+      accountId: _selectedAccountId!,
+      paymentMethodId: _selectedPaymentMethodId,
+    );
+  }
+
+  Future<void> _saveDebtPayment(int amount) async {
+    if (_selectedAccountId == null || _selectedPaymentMethodId == null) {
+      _showMessage('Selecciona una cuenta y medio de pago.');
+      return;
+    }
+
+    final selectedAccount = _findAccount(_selectedAccountId);
+    final currency = selectedAccount?['currency'] as String? ?? 'PEN';
+
+    await _executeSave(
+      amount: amount,
+      currency: currency,
+      items: [],
       payments: [
         TransactionPaymentInput(
           paymentMethodId: _selectedPaymentMethodId!,
@@ -539,7 +576,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
     try {
       final transaction = Transaction(
         id: widget.transactionId,
-        type: TransactionType.values.firstWhere((v) => v.name == _type),
+        type: TransactionType.fromDbValue(_type), // 👈 Mapeo seguro
         amount: amount,
         currency: currency,
         accountId: accountId,
@@ -568,6 +605,38 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
     }
   }
 
+  Future<void> _deleteThisTransaction() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Eliminar operación'),
+          content: const Text(
+            '¿Estás seguro de que deseas eliminar esta operación?\n\n'
+            'Se restaurará el saldo en tu cuenta y, si correspondía a un abono de deuda, se actualizará el pendiente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      await _transactionRepository.delete(widget.transactionId);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    }
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -576,6 +645,27 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   }
 
   Widget _buildTypeSelector() {
+    if (_isDebtPayment) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.purple.shade900.withAlpha(50),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.purple.shade300),
+        ),
+        child: Row(
+          children: const [
+            Icon(Icons.handshake_outlined, color: Colors.purpleAccent, size: 18),
+            SizedBox(width: 8),
+            Text(
+              'Abono a Deuda (Anclado a Compromisos)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
     return SegmentedButton<String>(
       segments: const [
         ButtonSegment(
@@ -605,7 +695,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   }
 
   Widget _buildCategorySection(bool isDark) {
-    if (_isTransfer) return const SizedBox.shrink();
+    if (_isTransfer || _isDebtPayment) return const SizedBox.shrink();
 
     if (_loadingCategories) {
       return const Center(
@@ -761,12 +851,14 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
           items: _accounts.map((account) {
             final name = account['name'] as String;
             final currency = account['currency'] as String;
-            final balance = account['currentBalance'] as int? ?? 0;
+            final balance = account['freeBalance'] as int? ?? 0;
 
             return DropdownMenuItem<int>(
               value: account['id'] as int,
               child: Text(
-                '$name ($currency) · Disp: ${_formatAmount(balance, currency)}',
+                _isIncome
+                    ? '$name ($currency)'
+                    : '$name ($currency) · Libre: ${_formatAmount(balance, currency)}',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -781,12 +873,12 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
                     _selectedPaymentMethodId = null;
                   });
 
-                  if (value != null && _isExpense) {
+                  if (value != null && (_isExpense || _isDebtPayment)) {
                     _loadPaymentMethods(value);
                   }
                 },
         ),
-        if (_isExpense && _selectedAccountId != null) ...[
+        if ((_isExpense || _isDebtPayment) && _selectedAccountId != null) ...[
           const SizedBox(height: 16),
           if (_paymentMethods.isEmpty)
             Text(
@@ -840,12 +932,12 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
           items: _accounts.map((account) {
             final name = account['name'] as String;
             final currency = account['currency'] as String;
-            final balance = account['currentBalance'] as int? ?? 0;
+            final balance = account['freeBalance'] as int? ?? 0;
 
             return DropdownMenuItem<int>(
               value: account['id'] as int,
               child: Text(
-                '$name ($currency) · Disp: ${_formatAmount(balance, currency)}',
+                '$name ($currency) · Libre: ${_formatAmount(balance, currency)}',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -871,12 +963,11 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
           items: _accounts.map((account) {
             final name = account['name'] as String;
             final currency = account['currency'] as String;
-            final balance = account['currentBalance'] as int? ?? 0;
 
             return DropdownMenuItem<int>(
               value: account['id'] as int,
               child: Text(
-                '$name ($currency) · Disp: ${_formatAmount(balance, currency)}',
+                '$name ($currency)',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -898,7 +989,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
-    final showStandardAccountSection = _isExpense || _isIncome;
+    final showStandardAccountSection = _isExpense || _isIncome || _isDebtPayment;
 
     if (_loading) {
       return Scaffold(
@@ -914,6 +1005,13 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Editar operación'),
+        actions: [
+          IconButton(
+            onPressed: _deleteThisTransaction,
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            tooltip: 'Eliminar operación',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

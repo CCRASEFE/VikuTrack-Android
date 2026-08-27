@@ -10,6 +10,7 @@ import '../../models/debt.dart';
 import '../../repositories/account_repository.dart';
 import '../../repositories/debt_repository.dart';
 import '../../repositories/payment_method_repository.dart';
+import '../transactions/edit_transaction_page.dart';
 
 class DebtDetailPage extends StatefulWidget {
   final int debtId;
@@ -65,6 +66,116 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
       return '\$${amount.toStringAsFixed(2)}';
     }
     return 'S/ ${amount.toStringAsFixed(2)}';
+  }
+
+  Future<void> _editDebt() async {
+    if (_debt == null) return;
+
+    final descController = TextEditingController(text: _debt!.description);
+    final amountController = TextEditingController(
+      text: (_debt!.originalAmount / 100).toStringAsFixed(2),
+    );
+    String currency = _debt!.currency;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Editar Deuda'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: descController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Descripción / Acreedor *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: currency,
+                      decoration: const InputDecoration(
+                        labelText: 'Moneda',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'PEN', child: Text('Soles (PEN)')),
+                        DropdownMenuItem(value: 'USD', child: Text('Dólares (USD)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => currency = val);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Monto total de la deuda *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true && mounted) {
+      final desc = descController.text.trim();
+      final amt = (double.tryParse(amountController.text.replaceAll(',', '.')) ?? 0) * 100;
+      final newAmountCents = amt.round();
+
+      if (desc.isEmpty || newAmountCents <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ingresa una descripción y un monto válido.')),
+        );
+        return;
+      }
+
+      if (newAmountCents < _paidTotal) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'El monto total no puede ser menor a lo que ya has abonado (${_formatAmount(_paidTotal, _debt!.currency)}).',
+            ),
+          ),
+        );
+        return;
+      }
+
+      await _debtRepository.updateDebt(
+        Debt(
+          id: _debt!.id,
+          description: desc,
+          originalAmount: newAmountCents,
+          currency: currency,
+          date: _debt!.date,
+          active: _debt!.active,
+        ),
+      );
+
+      await _loadData();
+    }
   }
 
   Future<void> _makePayment() async {
@@ -230,8 +341,8 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
         return AlertDialog(
           title: const Text('Eliminar deuda'),
           content: const Text(
-            '¿Estás seguro de que deseas eliminar esta deuda?\n'
-            'Si ya tiene abonos registrados, se desactivará para proteger tus movimientos.',
+            '¿Estás seguro de que deseas eliminar esta deuda?\n\n'
+            'Se eliminará la deuda y todas sus operaciones de abono registradas, restaurando el saldo de tus cuentas.',
           ),
           actions: [
             TextButton(
@@ -252,6 +363,18 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
       await _debtRepository.deleteDebt(widget.debtId);
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _openEditPaymentTransaction(int transactionId) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => EditTransactionPage(transactionId: transactionId),
+      ),
+    );
+
+    if (result == true && mounted) {
+      await _loadData();
     }
   }
 
@@ -276,6 +399,11 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
         title: Text(_debt!.description),
         actions: [
           IconButton(
+            onPressed: _editDebt,
+            icon: Icon(Icons.edit_outlined, color: themeColors?.cardAccentText ?? colorScheme.primary),
+            tooltip: 'Editar deuda',
+          ),
+          IconButton(
             onPressed: _deleteDebt,
             icon: const Icon(Icons.delete_outline, color: Colors.red),
             tooltip: 'Eliminar deuda',
@@ -298,16 +426,19 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _debt!.description,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                      Expanded(
+                        child: Text(
+                          _debt!.description,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
@@ -320,7 +451,7 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                         child: Text(
                           isPaidOff ? 'Pagada' : 'Pendiente',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: isPaidOff
                                 ? (themeColors?.savingsText ?? Colors.white)
@@ -398,13 +529,23 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
             ),
           const SizedBox(height: 24),
 
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Historial de Abonos Realizados',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: themeColors?.cardBaseText ?? colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           Text(
-            'Historial de Abonos Realizados',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: themeColors?.cardBaseText ?? colorScheme.onSurface,
-            ),
+            'Toca cualquier abono para editar o eliminar la operación:',
+            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
 
@@ -428,6 +569,7 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
             )
           else
             ..._payments.map((p) {
+              final transactionId = p['transaction_id'] as int;
               final amt = p['amount'] as int;
               final date = p['date'] as String;
               final time = p['time'] as String;
@@ -442,35 +584,46 @@ class _DebtDetailPageState extends State<DebtDetailPage> {
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
                 ),
-                child: ListTile(
-                  leading: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: themeColors?.pillBg,
-                      borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => _openEditPaymentTransaction(transactionId),
+                  child: ListTile(
+                    leading: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: themeColors?.pillBg,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.check,
+                        color: themeColors?.cardAccentText ?? colorScheme.primary,
+                        size: 20,
+                      ),
                     ),
-                    child: Icon(
-                      Icons.check,
-                      color: themeColors?.cardAccentText ?? colorScheme.primary,
-                      size: 20,
+                    title: Text(
+                      desc?.isNotEmpty == true ? desc! : 'Abono a deuda',
+                      style: TextStyle(fontWeight: FontWeight.w600, color: themeColors?.cardBaseText),
                     ),
-                  ),
-                  title: Text(
-                    desc?.isNotEmpty == true ? desc! : 'Abono a deuda',
-                    style: TextStyle(fontWeight: FontWeight.w600, color: themeColors?.cardBaseText),
-                  ),
-                  subtitle: Text(
-                    '$date · $time\nDesde: $acc ($method)',
-                    style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                  ),
-                  isThreeLine: true,
-                  trailing: Text(
-                    _formatAmount(amt, _debt!.currency),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: themeColors?.cardAccentText ?? colorScheme.primary,
+                    subtitle: Text(
+                      '$date · $time\nDesde: $acc ($method)',
+                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                    ),
+                    isThreeLine: true,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatAmount(amt, _debt!.currency),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: themeColors?.cardAccentText ?? colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.chevron_right, size: 16, color: colorScheme.onSurfaceVariant),
+                      ],
                     ),
                   ),
                 ),

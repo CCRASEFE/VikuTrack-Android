@@ -5,7 +5,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_themes.dart';
-import '../../models/account.dart';
 import '../../models/reservation.dart';
 import '../../repositories/account_repository.dart';
 import '../../repositories/reservation_repository.dart';
@@ -23,7 +22,7 @@ class _ReservationsPageState extends State<ReservationsPage> {
 
   bool _loading = true;
   List<Map<String, Object?>> _reservations = [];
-  List<Account> _accounts = [];
+  List<Map<String, Object?>> _accounts = [];
 
   int _totalPEN = 0;
   int _totalUSD = 0;
@@ -36,14 +35,29 @@ class _ReservationsPageState extends State<ReservationsPage> {
 
   Future<void> _loadData() async {
     final reservations = await _reservationRepository.getActiveWithAccount();
-    final accounts = await _accountRepository.getActive();
+    final loadedAccounts = await _accountRepository.getActive();
     final totals = await _reservationRepository.getTotalReservedByCurrency();
+
+    final accountList = <Map<String, Object?>>[];
+    for (final acc in loadedAccounts) {
+      if (acc.id != null) {
+        final balanceDetails = await _accountRepository.getBalanceDetails(acc.id!);
+        accountList.add({
+          'id': acc.id,
+          'name': acc.name,
+          'currency': acc.currency,
+          'type': acc.type,
+          'freeBalance': balanceDetails['free'] ?? 0,
+          'totalBalance': balanceDetails['total'] ?? 0,
+        });
+      }
+    }
 
     if (!mounted) return;
 
     setState(() {
       _reservations = reservations;
-      _accounts = accounts;
+      _accounts = accountList;
       _totalPEN = totals['PEN'] ?? 0;
       _totalUSD = totals['USD'] ?? 0;
       _loading = false;
@@ -453,7 +467,7 @@ class _ReservationsPageState extends State<ReservationsPage> {
 }
 
 class _ReservationDialog extends StatefulWidget {
-  final List<Account> accounts;
+  final List<Map<String, Object?>> accounts;
   final Reservation? reservation;
   final Future<void> Function({
     required int accountId,
@@ -490,7 +504,7 @@ class _ReservationDialogState extends State<_ReservationDialog> {
       _reasonController.text = widget.reservation!.reason ?? '';
       _selectedAccountId = widget.reservation!.accountId;
     } else if (widget.accounts.isNotEmpty) {
-      _selectedAccountId = widget.accounts.first.id;
+      _selectedAccountId = widget.accounts.first['id'] as int?;
     }
   }
 
@@ -502,12 +516,17 @@ class _ReservationDialogState extends State<_ReservationDialog> {
     super.dispose();
   }
 
-  Account? _findSelectedAccount() {
+  Map<String, Object?>? _findSelectedAccount() {
     if (_selectedAccountId == null) return null;
     for (final acc in widget.accounts) {
-      if (acc.id == _selectedAccountId) return acc;
+      if (acc['id'] == _selectedAccountId) return acc;
     }
     return null;
+  }
+
+  String _formatAmount(int amountInCents, String currency) {
+    final amount = amountInCents / 100;
+    return currency == 'USD' ? '\$${amount.toStringAsFixed(2)}' : 'S/ ${amount.toStringAsFixed(2)}';
   }
 
   Future<void> _save() async {
@@ -537,6 +556,28 @@ class _ReservationDialogState extends State<_ReservationDialog> {
     final selectedAccount = _findSelectedAccount();
     if (selectedAccount == null) return;
 
+    final amountInCents = (parsedAmount * 100).round();
+    final currency = selectedAccount['currency'] as String;
+    int availableToReserve = selectedAccount['freeBalance'] as int? ?? 0;
+
+    // Si estamos editando y sigue en la misma cuenta, sumamos provisionalmente lo anterior
+    if (widget.reservation != null && widget.reservation!.accountId == _selectedAccountId) {
+      availableToReserve += widget.reservation!.amount;
+    }
+
+    // Validación preventiva en UI
+    if (amountInCents > availableToReserve) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Fondos insuficientes en "${selectedAccount['name']}": '
+            'Saldo libre disponible ${_formatAmount(availableToReserve, currency)}, intentas reservar ${_formatAmount(amountInCents, currency)}.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _saving = true;
     });
@@ -545,8 +586,8 @@ class _ReservationDialogState extends State<_ReservationDialog> {
       await widget.onSave(
         accountId: _selectedAccountId!,
         name: name,
-        amount: (parsedAmount * 100).round(),
-        currency: selectedAccount.currency,
+        amount: amountInCents,
+        currency: currency,
         reason: reason.isEmpty ? null : reason,
       );
 
@@ -558,7 +599,7 @@ class _ReservationDialogState extends State<_ReservationDialog> {
         _saving = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar reserva: $error')),
+        SnackBar(content: Text('$error')),
       );
     }
   }
@@ -593,10 +634,15 @@ class _ReservationDialogState extends State<_ReservationDialog> {
                 border: OutlineInputBorder(),
               ),
               items: widget.accounts.map((acc) {
+                final id = acc['id'] as int;
+                final name = acc['name'] as String;
+                final currency = acc['currency'] as String;
+                final freeBalance = acc['freeBalance'] as int? ?? 0;
+
                 return DropdownMenuItem<int>(
-                  value: acc.id,
+                  value: id,
                   child: Text(
-                    '${acc.name} (${acc.currency})',
+                    '$name ($currency) · Libre: ${_formatAmount(freeBalance, currency)}',
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),

@@ -69,12 +69,14 @@ class AccountRepository {
       limit: 1,
     );
 
-    if (maps.isEmpty) {
+    if (resultsIsEmpty(maps)) {
       return null;
     }
 
     return Account.fromMap(maps.first);
   }
+
+  bool resultsIsEmpty(List<Map<String, Object?>> maps) => maps.isEmpty;
 
   Future<int> update(Account account) async {
     if (account.id == null) {
@@ -119,7 +121,6 @@ class AccountRepository {
     );
   }
 
-  /// Comprueba si la cuenta tiene operaciones o reservas asociadas
   Future<bool> hasMovements(int accountId) async {
     final db = await DatabaseHelper.database;
 
@@ -142,7 +143,6 @@ class AccountRepository {
     return reservations.isNotEmpty;
   }
 
-  /// Borrado físico definitivo
   Future<void> delete(int id) async {
     final db = await DatabaseHelper.database;
 
@@ -160,15 +160,16 @@ class AccountRepository {
     });
   }
 
-  /// MOTOR DE SALDO REAL: Calcula el balance dinámico a partir del historial contable
+  /// MOTOR DE SALDO: Calcula Total, Reservado y Saldo Libre Disponible
   Future<Map<String, int>> getBalanceDetails(int accountId) async {
     final db = await DatabaseHelper.database;
 
     final account = await getById(accountId);
     if (account == null) {
-      return {'initial': 0, 'in': 0, 'out': 0, 'current': 0};
+      return {'initial': 0, 'in': 0, 'out': 0, 'total': 0, 'reserved': 0, 'free': 0, 'current': 0};
     }
 
+    // 1. Entradas y Salidas
     final results = await db.rawQuery('''
       SELECT
         COALESCE(SUM(CASE WHEN tp.direction = 'in' THEN tp.amount ELSE 0 END), 0) AS total_in,
@@ -179,15 +180,27 @@ class AccountRepository {
       WHERE pm.account_id = ? AND t.active = 1
     ''', [accountId]);
 
+    // 2. Total Reservado en esta cuenta
+    final reservationResults = await db.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS total_reserved
+      FROM reservations
+      WHERE account_id = ? AND active = 1
+    ''', [accountId]);
+
     final totalIn = (results.first['total_in'] as num?)?.toInt() ?? 0;
     final totalOut = (results.first['total_out'] as num?)?.toInt() ?? 0;
-    final currentBalance = account.initialBalance + totalIn - totalOut;
+    final totalBalance = account.initialBalance + totalIn - totalOut;
+    final totalReserved = (reservationResults.first['total_reserved'] as num?)?.toInt() ?? 0;
+    final freeBalance = totalBalance - totalReserved;
 
     return {
       'initial': account.initialBalance,
       'in': totalIn,
       'out': totalOut,
-      'current': currentBalance,
+      'total': totalBalance,
+      'reserved': totalReserved,
+      'free': freeBalance,
+      'current': totalBalance, // Total contable
     };
   }
 }

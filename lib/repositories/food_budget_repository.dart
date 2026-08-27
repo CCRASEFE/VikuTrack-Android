@@ -9,7 +9,7 @@ import '../models/food_budget_day.dart';
 class FoodBudgetRepository {
   static const String _defaultLimitKey = 'default_food_daily_limit';
 
-  /// Obtiene el límite diario estándar configurado en settings (por defecto S/ 30.00 = 3000)
+  /// Por defecto el límite diario es S/ 0.00 para no generar arrastres en días inactivos
   Future<int> getDefaultDailyLimit() async {
     final db = await DatabaseHelper.database;
     final results = await db.query(
@@ -20,13 +20,12 @@ class FoodBudgetRepository {
     );
 
     if (results.isEmpty || results.first['value'] == null) {
-      return 3000; // S/ 30.00 por defecto
+      return 0; // 👈 S/ 0.00 por defecto
     }
 
-    return int.tryParse(results.first['value'] as String) ?? 3000;
+    return int.tryParse(results.first['value'] as String) ?? 0;
   }
 
-  /// Guarda el límite diario predeterminado
   Future<void> setDefaultDailyLimit(int limitInCents) async {
     final db = await DatabaseHelper.database;
     await db.insert(
@@ -36,7 +35,6 @@ class FoodBudgetRepository {
     );
   }
 
-  /// Obtiene o inicializa la configuración de un día específico
   Future<FoodBudgetDay> getDay(String date) async {
     final db = await DatabaseHelper.database;
     final results = await db.query(
@@ -54,26 +52,22 @@ class FoodBudgetRepository {
     return FoodBudgetDay(date: date, dailyLimit: defaultLimit, adjustment: 0);
   }
 
-  /// Guarda o actualiza el límite y ajuste de un día
-  Future<void> saveDay({
+  Future<void> saveDayBaseLimit({
     required String date,
     required int dailyLimit,
-    required int adjustment,
   }) async {
     final db = await DatabaseHelper.database;
     final now = DateTime.now().toIso8601String();
 
     await db.rawInsert('''
       INSERT INTO food_budget_days (date, daily_limit, adjustment, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, 0, ?, ?)
       ON CONFLICT(date) DO UPDATE SET
         daily_limit = excluded.daily_limit,
-        adjustment = excluded.adjustment,
         updated_at = excluded.updated_at
-    ''', [date, dailyLimit, adjustment, now, now]);
+    ''', [date, dailyLimit, now, now]);
   }
 
-  /// Suma de todos los gastos de alimentación en una fecha determinada
   Future<int> getFoodSpendingByDate(String date) async {
     final db = await DatabaseHelper.database;
     final results = await db.rawQuery('''
@@ -88,7 +82,6 @@ class FoodBudgetRepository {
     return (results.first['total_spent'] as num?)?.toInt() ?? 0;
   }
 
-  /// Obtiene la lista de transacciones que cuentan para comida en una fecha
   Future<List<Map<String, Object?>>> getFoodTransactionsByDate(String date) async {
     final db = await DatabaseHelper.database;
     return db.rawQuery('''
@@ -108,5 +101,66 @@ class FoodBudgetRepository {
         AND ti.count_for_food_control = 1
       ORDER BY t.time DESC, t.id DESC
     ''', [date]);
+  }
+
+  /// Calcula el presupuesto diario y arrastre automático
+  Future<Map<String, int>> getDayCalculation(DateTime targetDate) async {
+    final db = await DatabaseHelper.database;
+    final defaultLimit = await getDefaultDailyLimit();
+
+    final targetDateStr = _formatDateIso(targetDate);
+    final yesterday = targetDate.subtract(const Duration(days: 1));
+    final yesterdayStr = _formatDateIso(yesterday);
+
+    // 1. Límite base del día objetivo
+    final targetDayRow = await db.query(
+      'food_budget_days',
+      where: 'date = ?',
+      whereArgs: [targetDateStr],
+      limit: 1,
+    );
+    final targetBaseLimit = targetDayRow.isNotEmpty
+        ? (targetDayRow.first['daily_limit'] as int)
+        : defaultLimit;
+
+    // 2. Gasto real del día objetivo
+    final targetSpent = await getFoodSpendingByDate(targetDateStr);
+
+    // 3. Límite y gasto de ayer
+    final yesterdayDayRow = await db.query(
+      'food_budget_days',
+      where: 'date = ?',
+      whereArgs: [yesterdayStr],
+      limit: 1,
+    );
+    final yesterdayBaseLimit = yesterdayDayRow.isNotEmpty
+        ? (yesterdayDayRow.first['daily_limit'] as int)
+        : defaultLimit;
+
+    final yesterdaySpent = await getFoodSpendingByDate(yesterdayStr);
+
+    // El arrastre automático solo aplica si ayer tuvo presupuesto configurado o gastos reales
+    int autoAdjustment = 0;
+    if (yesterdayBaseLimit > 0 || yesterdaySpent > 0 || yesterdayDayRow.isNotEmpty) {
+      autoAdjustment = yesterdayBaseLimit - yesterdaySpent;
+    }
+
+    final effectiveTargetLimit = targetBaseLimit + autoAdjustment;
+    final targetRemaining = effectiveTargetLimit - targetSpent;
+
+    return {
+      'baseLimit': targetBaseLimit,
+      'autoAdjustment': autoAdjustment,
+      'effectiveLimit': effectiveTargetLimit,
+      'spent': targetSpent,
+      'remaining': targetRemaining,
+    };
+  }
+
+  String _formatDateIso(DateTime d) {
+    final year = d.year.toString();
+    final month = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
   }
 }

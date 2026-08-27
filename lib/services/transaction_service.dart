@@ -53,8 +53,7 @@ class TransactionService {
       payments: payments,
     );
 
-    // Validar que las cuentas de salida tengan fondos suficientes
-    await _validateSufficientFunds(payments: payments);
+    await _validateSufficientFreeFunds(payments: payments);
 
     final db = await DatabaseHelper.database;
 
@@ -64,7 +63,7 @@ class TransactionService {
       final transactionId = await txn.insert(
         'transactions',
         {
-          'type': transaction.type.name,
+          'type': transaction.type.dbValue,
           'date': transaction.date.toIso8601String().split('T').first,
           'time': transaction.date.toIso8601String().split('T').last.split('.').first,
           'description': transaction.description,
@@ -115,8 +114,7 @@ class TransactionService {
       payments: payments,
     );
 
-    // Validar fondos suficientes considerando el reembolso provisional de los pagos anteriores
-    await _validateSufficientFunds(payments: payments, editingTransactionId: id);
+    await _validateSufficientFreeFunds(payments: payments, editingTransactionId: id);
 
     final db = await DatabaseHelper.database;
 
@@ -126,13 +124,20 @@ class TransactionService {
       await txn.update(
         'transactions',
         {
-          'type': transaction.type.name,
+          'type': transaction.type.dbValue,
           'date': transaction.date.toIso8601String().split('T').first,
           'time': transaction.date.toIso8601String().split('T').last.split('.').first,
           'description': transaction.description,
           'updated_at': now,
         },
         where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      await txn.update(
+        'debt_payments',
+        {'amount': transaction.amount},
+        where: 'transaction_id = ?',
         whereArgs: [id],
       );
 
@@ -175,8 +180,7 @@ class TransactionService {
     });
   }
 
-  /// Valida que la cuenta de origen tenga saldo real suficiente antes de registrar una salida
-  Future<void> _validateSufficientFunds({
+  Future<void> _validateSufficientFreeFunds({
     required List<TransactionPaymentInput> payments,
     int? editingTransactionId,
   }) async {
@@ -186,33 +190,47 @@ class TransactionService {
 
       final account = await _accountRepository.getById(accountId);
       final balanceDetails = await _accountRepository.getBalanceDetails(accountId);
-      int currentBalance = balanceDetails['current'] ?? 0;
+      int freeBalance = balanceDetails['free'] ?? 0;
+      final totalBalance = balanceDetails['total'] ?? 0;
+      final totalReserved = balanceDetails['reserved'] ?? 0;
 
-      // Si estamos editando, reintegramos provisionalmente lo que salió en la operación original
       if (editingTransactionId != null) {
         final oldPayments = await _transactionRepository.getPayments(editingTransactionId);
         for (final oldP in oldPayments.where((op) => op['direction'] == 'out')) {
           final oldMethodId = oldP['payment_method_id'] as int;
           final oldAccId = await _paymentMethodRepository.getAccountId(oldMethodId);
           if (oldAccId == accountId) {
-            currentBalance += (oldP['amount'] as num).toInt();
+            freeBalance += (oldP['amount'] as num).toInt();
           }
         }
       }
 
-      if (currentBalance < payment.amount) {
+      if (freeBalance < payment.amount) {
         final accountName = account?.name ?? 'Cuenta';
         final currency = account?.currency ?? 'PEN';
-        final dispStr = currency == 'USD'
-            ? '\$${(currentBalance / 100).toStringAsFixed(2)}'
-            : 'S/ ${(currentBalance / 100).toStringAsFixed(2)}';
+        final freeStr = currency == 'USD'
+            ? '\$${(freeBalance / 100).toStringAsFixed(2)}'
+            : 'S/ ${(freeBalance / 100).toStringAsFixed(2)}';
         final reqStr = currency == 'USD'
             ? '\$${(payment.amount / 100).toStringAsFixed(2)}'
             : 'S/ ${(payment.amount / 100).toStringAsFixed(2)}';
+        final reservedStr = currency == 'USD'
+            ? '\$${(totalReserved / 100).toStringAsFixed(2)}'
+            : 'S/ ${(totalReserved / 100).toStringAsFixed(2)}';
+        final totalStr = currency == 'USD'
+            ? '\$${(totalBalance / 100).toStringAsFixed(2)}'
+            : 'S/ ${(totalBalance / 100).toStringAsFixed(2)}';
 
-        throw ArgumentError(
-          'Fondos insuficientes en "$accountName": Saldo disponible $dispStr, intentas retirar $reqStr.',
-        );
+        if (totalReserved > 0) {
+          throw ArgumentError(
+            'Fondos insuficientes en "$accountName": '
+            'Tienes un saldo libre de $freeStr (Total: $totalStr, Reservado: $reservedStr) e intentas retirar $reqStr.',
+          );
+        } else {
+          throw ArgumentError(
+            'Fondos insuficientes en "$accountName": Saldo disponible $freeStr, intentas retirar $reqStr.',
+          );
+        }
       }
     }
   }
@@ -249,6 +267,10 @@ class TransactionService {
 
       case TransactionType.transfer:
         _validateTransfer(transaction: transaction, items: items, payments: payments);
+        break;
+
+      case TransactionType.debtPayment:
+        _validateDebtPayment(transaction: transaction, items: items, payments: payments);
         break;
     }
   }
@@ -334,18 +356,35 @@ class TransactionService {
     }
   }
 
+  void _validateDebtPayment({
+    required Transaction transaction,
+    required List<TransactionItemInput> items,
+    required List<TransactionPaymentInput> payments,
+  }) {
+    if (payments.isEmpty) {
+      throw ArgumentError('El pago de deuda debe tener un medio de pago.');
+    }
+
+    if (payments.any((payment) => payment.direction != 'out')) {
+      throw ArgumentError('El pago de deuda debe tener dirección "out".');
+    }
+
+    _validateTotals(transaction: transaction, items: items, payments: payments);
+  }
+
   void _validateTotals({
     required Transaction transaction,
     required List<TransactionItemInput> items,
     required List<TransactionPaymentInput> payments,
   }) {
-    final itemsTotal = items.fold<int>(0, (total, item) => total + item.amount);
-    final paymentsTotal = payments.fold<int>(0, (total, payment) => total + payment.amount);
-
-    if (itemsTotal != transaction.amount) {
-      throw ArgumentError('El total de los conceptos no coincide con el importe de la operación.');
+    if (items.isNotEmpty) {
+      final itemsTotal = items.fold<int>(0, (total, item) => total + item.amount);
+      if (itemsTotal != transaction.amount) {
+        throw ArgumentError('El total de los conceptos no coincide con el importe de la operación.');
+      }
     }
 
+    final paymentsTotal = payments.fold<int>(0, (total, payment) => total + payment.amount);
     if (paymentsTotal != transaction.amount) {
       throw ArgumentError('El total de los pagos no coincide con el importe de la operación.');
     }

@@ -58,24 +58,38 @@ class DebtRepository {
     required String date,
     String? note,
   }) async {
-    // Validar fondos suficientes en la cuenta de origen
     final account = await _accountRepository.getById(accountId);
     final balanceDetails = await _accountRepository.getBalanceDetails(accountId);
-    final currentBalance = balanceDetails['current'] ?? 0;
+    final freeBalance = balanceDetails['free'] ?? 0;
+    final totalReserved = balanceDetails['reserved'] ?? 0;
+    final totalBalance = balanceDetails['total'] ?? 0;
 
-    if (currentBalance < amount) {
+    if (freeBalance < amount) {
       final accountName = account?.name ?? 'Cuenta';
       final currency = account?.currency ?? 'PEN';
-      final dispStr = currency == 'USD'
-          ? '\$${(currentBalance / 100).toStringAsFixed(2)}'
-          : 'S/ ${(currentBalance / 100).toStringAsFixed(2)}';
+      final freeStr = currency == 'USD'
+          ? '\$${(freeBalance / 100).toStringAsFixed(2)}'
+          : 'S/ ${(freeBalance / 100).toStringAsFixed(2)}';
       final reqStr = currency == 'USD'
           ? '\$${(amount / 100).toStringAsFixed(2)}'
           : 'S/ ${(amount / 100).toStringAsFixed(2)}';
+      final totalStr = currency == 'USD'
+          ? '\$${(totalBalance / 100).toStringAsFixed(2)}'
+          : 'S/ ${(totalBalance / 100).toStringAsFixed(2)}';
+      final reservedStr = currency == 'USD'
+          ? '\$${(totalReserved / 100).toStringAsFixed(2)}'
+          : 'S/ ${(totalReserved / 100).toStringAsFixed(2)}';
 
-      throw ArgumentError(
-        'Fondos insuficientes en "$accountName": Saldo disponible $dispStr, intentas pagar $reqStr.',
-      );
+      if (totalReserved > 0) {
+        throw ArgumentError(
+          'Fondos insuficientes en "$accountName": '
+          'Saldo libre $freeStr (Total: $totalStr, Reservado: $reservedStr) e intentas pagar $reqStr.',
+        );
+      } else {
+        throw ArgumentError(
+          'Fondos insuficientes en "$accountName": Saldo disponible $freeStr, intentas pagar $reqStr.',
+        );
+      }
     }
 
     final db = await DatabaseHelper.database;
@@ -109,12 +123,14 @@ class DebtRepository {
     });
   }
 
+  /// Obtiene el historial de pagos incluyendo el `transaction_id` para navegación directa
   Future<List<Map<String, Object?>>> getPaymentHistory(int debtId) async {
     final db = await DatabaseHelper.database;
 
     return db.rawQuery('''
       SELECT
         dp.id AS payment_id,
+        dp.transaction_id,
         dp.amount,
         t.date,
         t.time,
@@ -152,21 +168,31 @@ class DebtRepository {
     );
   }
 
+  /// ELIMINACIÓN EN CASCADA TOTAL: Elimina la deuda y todas sus operaciones financieras vinculadas
   Future<void> deleteDebt(int id) async {
     final db = await DatabaseHelper.database;
 
-    final payments = await db.query(
-      'debt_payments',
-      where: 'debt_id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    await db.transaction((txn) async {
+      // 1. Obtener todas las transacciones vinculadas a los abonos de esta deuda
+      final rows = await txn.query(
+        'debt_payments',
+        columns: ['transaction_id'],
+        where: 'debt_id = ?',
+        whereArgs: [id],
+      );
 
-    if (payments.isEmpty) {
-      await db.delete('debts', where: 'id = ?', whereArgs: [id]);
-    } else {
-      await db.update('debts', {'active': 0}, where: 'id = ?', whereArgs: [id]);
-    }
+      // 2. Eliminar los registros de enlace en debt_payments
+      await txn.delete('debt_payments', where: 'debt_id = ?', whereArgs: [id]);
+
+      // 3. Eliminar cada transacción financiera (deshace la salida y restaura el saldo en las cuentas)
+      for (final row in rows) {
+        final txnId = row['transaction_id'] as int;
+        await txn.delete('transactions', where: 'id = ?', whereArgs: [txnId]);
+      }
+
+      // 4. Eliminar la deuda físicamente
+      await txn.delete('debts', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<Map<String, int>> getTotalPendingDebtsByCurrency() async {

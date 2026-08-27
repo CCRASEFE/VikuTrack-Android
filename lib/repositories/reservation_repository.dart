@@ -4,14 +4,36 @@
 
 import '../database/database_helper.dart';
 import '../models/reservation.dart';
+import 'account_repository.dart';
 
 class ReservationRepository {
+  final _accountRepository = AccountRepository();
+
+  /// Inserta una reserva validando que no supere el saldo libre disponible de la cuenta
   Future<int> insert(Reservation reservation) async {
+    final account = await _accountRepository.getById(reservation.accountId);
+    final balanceDetails = await _accountRepository.getBalanceDetails(reservation.accountId);
+    final freeBalance = balanceDetails['free'] ?? 0;
+
+    if (reservation.amount > freeBalance) {
+      final accountName = account?.name ?? 'Cuenta';
+      final currency = account?.currency ?? 'PEN';
+      final freeStr = currency == 'USD'
+          ? '\$${(freeBalance / 100).toStringAsFixed(2)}'
+          : 'S/ ${(freeBalance / 100).toStringAsFixed(2)}';
+      final reqStr = currency == 'USD'
+          ? '\$${(reservation.amount / 100).toStringAsFixed(2)}'
+          : 'S/ ${(reservation.amount / 100).toStringAsFixed(2)}';
+
+      throw ArgumentError(
+        'Fondos insuficientes en "$accountName": Tienes un saldo libre disponible de $freeStr e intentas reservar $reqStr.',
+      );
+    }
+
     final db = await DatabaseHelper.database;
     return db.insert('reservations', reservation.toMap());
   }
 
-  /// Obtiene todas las reservas activas junto con la información de su cuenta
   Future<List<Map<String, Object?>>> getActiveWithAccount() async {
     final db = await DatabaseHelper.database;
     return db.rawQuery('''
@@ -39,9 +61,35 @@ class ReservationRepository {
     return Reservation.fromMap(results.first);
   }
 
+  /// Actualiza la reserva validando saldo libre y reintegrando provisionalmente el monto anterior
   Future<int> update(Reservation reservation) async {
     if (reservation.id == null) {
       throw ArgumentError('No se puede actualizar una reserva sin ID.');
+    }
+
+    final oldReservation = await getById(reservation.id!);
+    final account = await _accountRepository.getById(reservation.accountId);
+    final balanceDetails = await _accountRepository.getBalanceDetails(reservation.accountId);
+    int effectiveFreeBalance = balanceDetails['free'] ?? 0;
+
+    // Si sigue en la misma cuenta, sumamos el monto anterior antes de verificar
+    if (oldReservation != null && oldReservation.accountId == reservation.accountId) {
+      effectiveFreeBalance += oldReservation.amount;
+    }
+
+    if (reservation.amount > effectiveFreeBalance) {
+      final accountName = account?.name ?? 'Cuenta';
+      final currency = account?.currency ?? 'PEN';
+      final freeStr = currency == 'USD'
+          ? '\$${(effectiveFreeBalance / 100).toStringAsFixed(2)}'
+          : 'S/ ${(effectiveFreeBalance / 100).toStringAsFixed(2)}';
+      final reqStr = currency == 'USD'
+          ? '\$${(reservation.amount / 100).toStringAsFixed(2)}'
+          : 'S/ ${(reservation.amount / 100).toStringAsFixed(2)}';
+
+      throw ArgumentError(
+        'Fondos insuficientes en "$accountName": Tienes un saldo libre disponible de $freeStr e intentas reservar $reqStr.',
+      );
     }
 
     final db = await DatabaseHelper.database;
@@ -61,7 +109,6 @@ class ReservationRepository {
     );
   }
 
-  /// Borrado físico de la reserva (liberación definitiva del fondo)
   Future<int> delete(int id) async {
     final db = await DatabaseHelper.database;
     return db.delete(
@@ -71,7 +118,6 @@ class ReservationRepository {
     );
   }
 
-  /// Suma total de reservas activas por moneda
   Future<Map<String, int>> getTotalReservedByCurrency() async {
     final db = await DatabaseHelper.database;
     final results = await db.rawQuery('''
@@ -96,7 +142,6 @@ class ReservationRepository {
     return {'PEN': pen, 'USD': usd};
   }
 
-  /// Total reservado en una cuenta específica
   Future<int> getTotalReservedByAccount(int accountId) async {
     final db = await DatabaseHelper.database;
     final results = await db.rawQuery('''

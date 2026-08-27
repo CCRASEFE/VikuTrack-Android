@@ -9,6 +9,7 @@ import '../../repositories/account_repository.dart';
 import '../../repositories/debt_repository.dart';
 import '../../repositories/food_budget_repository.dart';
 import '../../repositories/people_owed_repository.dart';
+import '../../repositories/planned_purchase_repository.dart';
 import '../../repositories/reservation_repository.dart';
 import '../../repositories/transaction_repository.dart';
 import '../debts/debts_page.dart';
@@ -32,6 +33,7 @@ class _DashboardPageState extends State<DashboardPage> {
   final _foodBudgetRepository = FoodBudgetRepository();
   final _debtRepository = DebtRepository();
   final _peopleOwedRepository = PeopleOwedRepository();
+  final _plannedPurchaseRepository = PlannedPurchaseRepository();
 
   bool _loading = true;
 
@@ -45,13 +47,14 @@ class _DashboardPageState extends State<DashboardPage> {
   int _reservedPEN = 0;
   int _reservedUSD = 0;
 
-  // Comida de hoy
+  // Comida de hoy con arrastre automático
   int _foodRemainingToday = 0;
   int _foodLimitToday = 0;
 
-  // Deudas y Préstamos
+  // Deudas, Préstamos y Compras Planeadas
   int _debtsPendingPEN = 0;
   int _owedToMePEN = 0;
+  int _plannedPEN = 0;
 
   // Totales mensuales
   int _incomePEN = 0;
@@ -66,13 +69,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final now = DateTime.now();
     _selectedMonth = DateTime(now.year, now.month);
     _loadDashboardData();
-  }
-
-  String _formatDateToIso(DateTime d) {
-    final year = d.year.toString();
-    final month = d.month.toString().padLeft(2, '0');
-    final day = d.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
   }
 
   Future<void> _loadDashboardData() async {
@@ -95,15 +91,13 @@ class _DashboardPageState extends State<DashboardPage> {
     // 2. Fondos Reservados
     final reservedTotals = await _reservationRepository.getTotalReservedByCurrency();
 
-    // 3. Comida de HOY
-    final todayIso = _formatDateToIso(DateTime.now());
-    final todayBudget = await _foodBudgetRepository.getDay(todayIso);
-    final todaySpent = await _foodBudgetRepository.getFoodSpendingByDate(todayIso);
-    final effectiveLimit = todayBudget.dailyLimit + todayBudget.adjustment;
+    // 3. Comida de HOY con arrastre automático
+    final foodCalc = await _foodBudgetRepository.getDayCalculation(DateTime.now());
 
-    // 4. Deudas y Préstamos
+    // 4. Deudas, Préstamos y Compras Planeadas
     final debtTotals = await _debtRepository.getTotalPendingDebtsByCurrency();
     final peopleTotals = await _peopleOwedRepository.getTotalOwedToMeByCurrency();
+    final plannedTotals = await _plannedPurchaseRepository.getTotalEstimatedByCurrency();
 
     // 5. Mes Seleccionado
     final monthlyTotals = await _transactionRepository.getMonthlyTotals(
@@ -123,11 +117,12 @@ class _DashboardPageState extends State<DashboardPage> {
       _reservedPEN = reservedTotals['PEN'] ?? 0;
       _reservedUSD = reservedTotals['USD'] ?? 0;
 
-      _foodLimitToday = effectiveLimit;
-      _foodRemainingToday = effectiveLimit - todaySpent;
+      _foodLimitToday = foodCalc['effectiveLimit'] ?? 0;
+      _foodRemainingToday = foodCalc['remaining'] ?? 0;
 
       _debtsPendingPEN = debtTotals['PEN'] ?? 0;
       _owedToMePEN = peopleTotals['PEN'] ?? 0;
+      _plannedPEN = plannedTotals['PEN'] ?? 0;
 
       _incomePEN = monthlyTotals['incomePEN'] ?? 0;
       _expensePEN = monthlyTotals['expensePEN'] ?? 0;
@@ -220,8 +215,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildAvailableCashCard() {
-    final themeColors = Theme.of(context).extension<AppThemeColors>();
+  Widget _buildAvailableCashCard(AppThemeColors? themeColors) {
     final freePEN = _netWorthPEN - _reservedPEN;
     final freeUSD = _netWorthUSD - _reservedUSD;
 
@@ -332,15 +326,13 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildFeatureCardsRow() {
-    final themeColors = Theme.of(context).extension<AppThemeColors>();
+  Widget _buildFeatureCardsRow(AppThemeColors? themeColors) {
     final foodIsExceeded = _foodRemainingToday < 0;
 
     return Column(
       children: [
         Row(
           children: [
-            // Tarjeta de Reservas
             Expanded(
               child: Card(
                 elevation: 0,
@@ -377,7 +369,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _formatAmount(_reservedPEN, 'PEN'),
+                          _reservedUSD > 0
+                              ? '${_formatAmount(_reservedPEN, 'PEN')}\n${_formatAmount(_reservedUSD, 'USD')}'
+                              : _formatAmount(_reservedPEN, 'PEN'),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -399,8 +393,6 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
             const SizedBox(width: 10),
-
-            // Tarjeta de Comida Hoy
             Expanded(
               child: Card(
                 elevation: 0,
@@ -410,7 +402,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
                 ),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(16),
                   onTap: _openFoodBudget,
                   child: Padding(
                     padding: const EdgeInsets.all(14),
@@ -441,7 +433,9 @@ class _DashboardPageState extends State<DashboardPage> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
-                            color: foodIsExceeded ? Theme.of(context).colorScheme.error : themeColors?.cardBaseText,
+                            color: foodIsExceeded
+                                ? Theme.of(context).colorScheme.error
+                                : themeColors?.cardBaseText,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -462,7 +456,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         const SizedBox(height: 10),
 
-        // Tarjeta de Deudas y Préstamos
+        // Tarjeta de Compromisos y Metas (Deudas, Préstamos y Compras)
         Card(
           elevation: 0,
           color: themeColors?.cardBaseBg,
@@ -496,7 +490,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Deudas y Préstamos',
+                          'Compromisos y Metas',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -504,7 +498,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                         Text(
-                          'Debo: ${_formatAmount(_debtsPendingPEN, 'PEN')}  ·  Me deben: ${_formatAmount(_owedToMePEN, 'PEN')}',
+                          'Debo: ${_formatAmount(_debtsPendingPEN, 'PEN')} · Me deben: ${_formatAmount(_owedToMePEN, 'PEN')}${_plannedPEN > 0 ? ' · Metas: ${_formatAmount(_plannedPEN, 'PEN')}' : ''}',
                           style: TextStyle(
                             fontSize: 11,
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -526,9 +520,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildQuickActions() {
-    final themeColors = Theme.of(context).extension<AppThemeColors>();
-
+  Widget _buildQuickActions(AppThemeColors? themeColors) {
     return Row(
       children: [
         Expanded(
@@ -561,9 +553,8 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildMonthlySummaryCard() {
+  Widget _buildMonthlySummaryCard(AppThemeColors? themeColors) {
     final netPEN = _incomePEN - _expensePEN;
-    final themeColors = Theme.of(context).extension<AppThemeColors>();
 
     return Card(
       elevation: 0,
@@ -617,11 +608,25 @@ class _DashboardPageState extends State<DashboardPage> {
                           children: [
                             Icon(Icons.trending_up, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
                             const SizedBox(width: 6),
-                            Text('Ingresos', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                            Text(
+                              'Ingresos',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Text(_formatAmount(_incomePEN, 'PEN'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: themeColors?.cardBaseText)),
+                        Text(
+                          _formatAmount(_incomePEN, 'PEN'),
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: themeColors?.cardBaseText,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -641,11 +646,25 @@ class _DashboardPageState extends State<DashboardPage> {
                           children: [
                             Icon(Icons.trending_down, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
                             const SizedBox(width: 6),
-                            Text('Gastos', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                            Text(
+                              'Gastos',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Text(_formatAmount(_expensePEN, 'PEN'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: themeColors?.cardBaseText)),
+                        Text(
+                          _formatAmount(_expensePEN, 'PEN'),
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: themeColors?.cardBaseText,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -653,8 +672,6 @@ class _DashboardPageState extends State<DashboardPage> {
               ],
             ),
             const SizedBox(height: 12),
-
-            // Píldora de Ahorro
             Container(
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               decoration: BoxDecoration(
@@ -689,12 +706,11 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildRecentTransactionsList() {
-    final themeColors = Theme.of(context).extension<AppThemeColors>();
-
+  Widget _buildRecentTransactionsList(AppThemeColors? themeColors) {
     if (_recentTransactions.isEmpty) {
       return Card(
         elevation: 0,
+        color: themeColors?.cardBaseBg,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
@@ -744,6 +760,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
+          color: themeColors?.cardBaseBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: themeColors?.cardBaseBorder ?? Colors.white12),
+          ),
           child: ListTile(
             leading: CircleAvatar(
               backgroundColor: themeColors?.pillBg,
@@ -778,6 +799,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Finanzas Personales'),
@@ -796,29 +819,37 @@ class _DashboardPageState extends State<DashboardPage> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildAvailableCashCard(),
+                  _buildAvailableCashCard(themeColors),
                   const SizedBox(height: 12),
 
-                  _buildFeatureCardsRow(),
+                  _buildFeatureCardsRow(themeColors),
                   const SizedBox(height: 16),
 
-                  _buildQuickActions(),
+                  _buildQuickActions(themeColors),
                   const SizedBox(height: 20),
 
-                  const Text(
+                  Text(
                     'Resumen del Mes',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: themeColors?.cardBaseText ?? Theme.of(context).colorScheme.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  _buildMonthlySummaryCard(),
+                  _buildMonthlySummaryCard(themeColors),
                   const SizedBox(height: 24),
 
-                  const Text(
+                  Text(
                     'Últimos Movimientos',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: themeColors?.cardBaseText ?? Theme.of(context).colorScheme.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  _buildRecentTransactionsList(),
+                  _buildRecentTransactionsList(themeColors),
                   const SizedBox(height: 16),
                 ],
               ),
