@@ -27,7 +27,7 @@ class _DebtsPageState extends State<DebtsPage> {
   final _plannedPurchaseRepository = PlannedPurchaseRepository();
 
   bool _loading = true;
-  String _selectedSection = 'debts';
+  String _selectedSection = 'debts'; // 'debts', 'people', 'planned'
 
   List<Map<String, Object?>> _debts = [];
   List<PersonOwed> _peopleOwed = [];
@@ -642,8 +642,6 @@ class _DebtsPageState extends State<DebtsPage> {
     }
   }
 
-  /// EJECUCIÓN DIRECTA DE COMPRA:
-  /// Abre CreateTransactionPage con el nombre y monto autollenados y el tipo bloqueado como Gasto
   Future<void> _executePurchase(PlannedPurchase item) async {
     final bought = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -651,7 +649,7 @@ class _DebtsPageState extends State<DebtsPage> {
           initialType: 'expense',
           initialDescription: item.name,
           initialAmount: item.amount,
-          lockType: true, // 👈 Bloquea el selector de tipo para enfocar solo en pagar
+          lockType: true,
         ),
       ),
     );
@@ -664,6 +662,81 @@ class _DebtsPageState extends State<DebtsPage> {
         SnackBar(content: Text('¡"${item.name}" comprado y registrado como gasto real!')),
       );
     }
+  }
+
+  void _showSettledDebtsDialog() {
+    final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final settledDebts = _debts.where((d) {
+      final original = d['original_amount'] as int;
+      final paid = (d['paid_amount'] as num?)?.toInt() ?? 0;
+      return (original - paid) <= 0;
+    }).toList();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Deudas Totalmente Pagadas'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: settledDebts.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'No tienes deudas saldadas en el historial.',
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: settledDebts.length,
+                    itemBuilder: (context, index) {
+                      final d = settledDebts[index];
+                      final id = d['id'] as int;
+                      final desc = d['description'] as String;
+                      final original = d['original_amount'] as int;
+                      final currency = d['currency'] as String;
+
+                      return ListTile(
+                        leading: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: themeColors?.pillBg,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.check, color: themeColors?.cardAccentText, size: 18),
+                        ),
+                        title: Text(desc, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Text(
+                          'Total saldado: ${_formatAmount(original, currency)}',
+                          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                        ),
+                        trailing: const Icon(Icons.chevron_right, size: 16),
+                        onTap: () async {
+                          Navigator.of(dialogContext).pop();
+                          final res = await Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => DebtDetailPage(debtId: id)),
+                          );
+                          if (res == true && mounted) {
+                            await _loadData();
+                          }
+                        },
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildSummaryHeader(AppThemeColors? themeColors) {
@@ -812,7 +885,14 @@ class _DebtsPageState extends State<DebtsPage> {
   Widget _buildDebtsList(AppThemeColors? themeColors) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (_debts.isEmpty) {
+    // Filtramos para mostrar ÚNICAMENTE las deudas que tienen saldo pendiente > 0
+    final pendingDebts = _debts.where((d) {
+      final original = d['original_amount'] as int;
+      final paid = (d['paid_amount'] as num?)?.toInt() ?? 0;
+      return (original - paid) > 0;
+    }).toList();
+
+    if (pendingDebts.isEmpty) {
       return Card(
         elevation: 0,
         color: themeColors?.cardBaseBg,
@@ -824,7 +904,7 @@ class _DebtsPageState extends State<DebtsPage> {
           padding: const EdgeInsets.all(32),
           child: Center(
             child: Text(
-              'No tienes deudas pendientes registradas.\n¡Excelente estado financiero!',
+              'No tienes deudas pendientes por pagar.\n¡Excelente estado financiero!',
               textAlign: TextAlign.center,
               style: TextStyle(color: colorScheme.onSurfaceVariant),
             ),
@@ -834,7 +914,7 @@ class _DebtsPageState extends State<DebtsPage> {
     }
 
     return Column(
-      children: _debts.map((d) {
+      children: pendingDebts.map((d) {
         final id = d['id'] as int;
         final desc = d['description'] as String;
         final original = d['original_amount'] as int;
@@ -843,7 +923,6 @@ class _DebtsPageState extends State<DebtsPage> {
         final date = d['date'] as String;
         final pending = (original - paid).clamp(0, original);
         final progress = original > 0 ? (paid / original).clamp(0.0, 1.0) : 0.0;
-        final isPaidOff = pending == 0;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -907,20 +986,16 @@ class _DebtsPageState extends State<DebtsPage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isPaidOff
-                              ? (themeColors?.savingsBg ?? Colors.green)
-                              : themeColors?.pillBg,
+                          color: themeColors?.pillBg,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: themeColors?.pillBorder ?? Colors.transparent),
                         ),
                         child: Text(
-                          isPaidOff ? 'Pagada' : 'Pendiente',
+                          'Pendiente',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: isPaidOff
-                                ? (themeColors?.savingsText ?? Colors.white)
-                                : (themeColors?.cardAccentText ?? colorScheme.primary),
+                            color: themeColors?.cardAccentText ?? colorScheme.primary,
                           ),
                         ),
                       ),
@@ -939,9 +1014,7 @@ class _DebtsPageState extends State<DebtsPage> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
-                              color: isPaidOff
-                                  ? colorScheme.onSurfaceVariant
-                                  : (themeColors?.cardAccentText ?? colorScheme.primary),
+                              color: themeColors?.cardAccentText ?? colorScheme.primary,
                             ),
                           ),
                         ],
@@ -1214,6 +1287,7 @@ class _DebtsPageState extends State<DebtsPage> {
   @override
   Widget build(BuildContext context) {
     final themeColors = Theme.of(context).extension<AppThemeColors>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     String fabLabel;
     VoidCallback fabAction;
@@ -1231,7 +1305,25 @@ class _DebtsPageState extends State<DebtsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Compromisos y Metas'),
+        title: const Text('Compromisos y por Comprar'),
+        actions: [
+          if (_selectedSection == 'debts')
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant),
+              onSelected: (val) {
+                if (val == 'settled') _showSettledDebtsDialog();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'settled',
+                  child: ListTile(
+                    leading: Icon(Icons.check_circle_outline),
+                    title: Text('Ver deudas saldadas'),
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

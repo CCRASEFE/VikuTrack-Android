@@ -92,17 +92,23 @@ class DebtRepository {
       }
     }
 
+    final debt = await getDebtById(debtId);
     final db = await DatabaseHelper.database;
 
     await db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
       final time = now.split('T').last.split('.').first;
 
+      // Se guarda siempre con el nombre descriptivo de la deuda
+      final transactionDesc = note?.isNotEmpty == true
+          ? note!
+          : (debt != null ? 'Pago de deuda: ${debt.description}' : 'Pago de deuda');
+
       final transactionId = await txn.insert('transactions', {
         'type': 'debt_payment',
         'date': date,
         'time': time,
-        'description': note?.isNotEmpty == true ? note : 'Pago de deuda',
+        'description': transactionDesc,
         'active': 1,
         'created_at': now,
         'updated_at': now,
@@ -123,7 +129,6 @@ class DebtRepository {
     });
   }
 
-  /// Obtiene el historial de pagos incluyendo el `transaction_id` para navegación directa
   Future<List<Map<String, Object?>>> getPaymentHistory(int debtId) async {
     final db = await DatabaseHelper.database;
 
@@ -168,12 +173,10 @@ class DebtRepository {
     );
   }
 
-  /// ELIMINACIÓN EN CASCADA TOTAL: Elimina la deuda y todas sus operaciones financieras vinculadas
   Future<void> deleteDebt(int id) async {
     final db = await DatabaseHelper.database;
 
     await db.transaction((txn) async {
-      // 1. Obtener todas las transacciones vinculadas a los abonos de esta deuda
       final rows = await txn.query(
         'debt_payments',
         columns: ['transaction_id'],
@@ -181,16 +184,13 @@ class DebtRepository {
         whereArgs: [id],
       );
 
-      // 2. Eliminar los registros de enlace en debt_payments
       await txn.delete('debt_payments', where: 'debt_id = ?', whereArgs: [id]);
 
-      // 3. Eliminar cada transacción financiera (deshace la salida y restaura el saldo en las cuentas)
       for (final row in rows) {
         final txnId = row['transaction_id'] as int;
         await txn.delete('transactions', where: 'id = ?', whereArgs: [txnId]);
       }
 
-      // 4. Eliminar la deuda físicamente
       await txn.delete('debts', where: 'id = ?', whereArgs: [id]);
     });
   }

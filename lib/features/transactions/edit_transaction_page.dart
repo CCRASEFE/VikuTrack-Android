@@ -576,7 +576,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
     try {
       final transaction = Transaction(
         id: widget.transactionId,
-        type: TransactionType.fromDbValue(_type), // 👈 Mapeo seguro
+        type: TransactionType.fromDbValue(_type),
         amount: amount,
         currency: currency,
         accountId: accountId,
@@ -671,12 +671,12 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
         ButtonSegment(
           value: 'expense',
           label: Text('Gasto'),
-          icon: Icon(Icons.arrow_upward),
+          icon: Icon(Icons.trending_down), // 👈 Gráfica de gasto decreciente
         ),
         ButtonSegment(
           value: 'income',
           label: Text('Ingreso'),
-          icon: Icon(Icons.arrow_downward),
+          icon: Icon(Icons.trending_up), // 👈 Gráfica de ganancia creciente
         ),
         ButtonSegment(
           value: 'transfer',

@@ -428,7 +428,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
 
     try {
       final transaction = Transaction(
-        type: TransactionType.fromDbValue(_type), // 👈 Mapeo seguro
+        type: TransactionType.fromDbValue(_type),
         amount: amount,
         currency: currency,
         accountId: accountId,
@@ -560,12 +560,12 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
         ButtonSegment(
           value: 'expense',
           label: Text('Gasto'),
-          icon: Icon(Icons.arrow_upward),
+          icon: Icon(Icons.trending_down), // 👈 Gráfica de gasto decreciente
         ),
         ButtonSegment(
           value: 'income',
           label: Text('Ingreso'),
-          icon: Icon(Icons.arrow_downward),
+          icon: Icon(Icons.trending_up), // 👈 Gráfica de ganancia creciente
         ),
         ButtonSegment(
           value: 'transfer',
@@ -833,12 +833,12 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
           items: _accounts.map((account) {
             final name = account['name'] as String;
             final currency = account['currency'] as String;
-            final freeBalance = account['freeBalance'] as int? ?? 0;
+            final balance = account['freeBalance'] as int? ?? 0;
 
             return DropdownMenuItem<int>(
               value: account['id'] as int,
               child: Text(
-                '$name ($currency) · Libre: ${_formatAmount(freeBalance, currency)}',
+                '$name ($currency) · Libre: ${_formatAmount(balance, currency)}',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),

@@ -91,8 +91,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'expense', child: Text('Gasto')),
-                      DropdownMenuItem(value: 'income', child: Text('Ingreso')),
+                      DropdownMenuItem(value: 'expense', child: Text('Gasto (Salida)')),
+                      DropdownMenuItem(value: 'income', child: Text('Ingreso (Ganancia)')),
                     ],
                     onChanged: (value) {
                       if (value == null) return;
@@ -169,8 +169,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'expense', child: Text('Gasto')),
-                      DropdownMenuItem(value: 'income', child: Text('Ingreso')),
+                      DropdownMenuItem(value: 'expense', child: Text('Gasto (Salida)')),
+                      DropdownMenuItem(value: 'income', child: Text('Ingreso (Ganancia)')),
                     ],
                     onChanged: (value) {
                       if (value == null) return;
@@ -536,9 +536,9 @@ class _CategoriesPageState extends State<CategoriesPage> {
         children: [
           _buildFilterPill('all', '✓ Todas (${_categories.length})', themeColors),
           const SizedBox(width: 8),
-          _buildFilterPill('expense', '↑ Gastos ($expenseCount)', themeColors),
+          _buildFilterPill('expense', 'Gastos ($expenseCount)', themeColors),
           const SizedBox(width: 8),
-          _buildFilterPill('income', '↓ Ingresos ($incomeCount)', themeColors),
+          _buildFilterPill('income', 'Ingresos ($incomeCount)', themeColors),
         ],
       ),
     );
@@ -607,7 +607,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                     final type = category['type']?.toString() ?? '';
                     final isIncome = type == 'income';
 
-                    // Tarjeta de Ingreso (Monocromática oficial)
+                    // Tarjeta de Ingreso (Gráfica de rendimiento creciente)
                     if (isIncome) {
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -625,7 +625,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              Icons.arrow_downward,
+                              Icons.trending_up, // 👈 Gráfica de ganancia creciente
                               color: themeColors?.cardAccentText ?? colorScheme.primary,
                               size: 20,
                             ),
@@ -672,7 +672,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                       );
                     }
 
-                    // Tarjeta de Gasto (Monocromática oficial)
+                    // Tarjeta de Gasto (Gráfica de salida / pérdida decreciente)
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
                       color: themeColors?.cardBaseBg,
@@ -689,7 +689,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
-                            Icons.arrow_upward,
+                            Icons.trending_down, // 👈 Gráfica de salida/gasto decreciente
                             color: themeColors?.cardAccentText ?? colorScheme.primary,
                             size: 20,
                           ),

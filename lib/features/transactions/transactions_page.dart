@@ -193,11 +193,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
         children: [
           _buildFilterPill('all', 'Todas', themeColors),
           const SizedBox(width: 8),
-          _buildFilterPill('expense', '↑ Gastos', themeColors),
+          _buildFilterPill('expense', 'Gastos', themeColors),
           const SizedBox(width: 8),
-          _buildFilterPill('income', '↓ Ingresos', themeColors),
+          _buildFilterPill('income', 'Ingresos', themeColors),
           const SizedBox(width: 8),
-          _buildFilterPill('transfer', '⇄ Transferencias', themeColors),
+          _buildFilterPill('transfer', 'Transferencias', themeColors),
         ],
       ),
     );
@@ -258,13 +258,13 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       String titleText;
 
                       if (type == 'expense') {
-                        iconData = Icons.arrow_upward;
+                        iconData = Icons.trending_down; // 👈 Gráfica de gasto decreciente
                         prefix = '-';
                         titleText = description?.isNotEmpty == true
                             ? description!
                             : (categoryName ?? 'Gasto');
                       } else if (type == 'income') {
-                        iconData = Icons.arrow_downward;
+                        iconData = Icons.trending_up; // 👈 Gráfica de ganancia creciente
                         prefix = '+';
                         titleText = description?.isNotEmpty == true
                             ? description!
@@ -303,7 +303,6 @@ class _TransactionsPageState extends State<TransactionsPage> {
                             padding: const EdgeInsets.all(14),
                             child: Row(
                               children: [
-                                // Círculo de ícono con estilo temático oficial
                                 Container(
                                   width: 42,
                                   height: 42,
@@ -361,7 +360,6 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    // Todos los importes en color dorado oficial del tema
                                     Text(
                                       '$prefix${_formatAmount(amount, currency)}',
                                       style: TextStyle(

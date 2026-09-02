@@ -39,28 +39,22 @@ class _DashboardPageState extends State<DashboardPage> {
 
   late DateTime _selectedMonth;
 
-  // Totales de patrimonio
   int _netWorthPEN = 0;
   int _netWorthUSD = 0;
 
-  // Totales de reservas
   int _reservedPEN = 0;
   int _reservedUSD = 0;
 
-  // Comida de hoy con arrastre automático
   int _foodRemainingToday = 0;
   int _foodLimitToday = 0;
 
-  // Deudas, Préstamos y Compras Planeadas
   int _debtsPendingPEN = 0;
   int _owedToMePEN = 0;
   int _plannedPEN = 0;
 
-  // Totales mensuales
   int _incomePEN = 0;
   int _expensePEN = 0;
 
-  // Últimas operaciones
   List<Map<String, Object?>> _recentTransactions = [];
 
   @override
@@ -72,7 +66,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _loadDashboardData() async {
-    // 1. Patrimonio Total en Cuentas
     final accounts = await _accountRepository.getActive();
     int pen = 0;
     int usd = 0;
@@ -88,24 +81,18 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     }
 
-    // 2. Fondos Reservados
     final reservedTotals = await _reservationRepository.getTotalReservedByCurrency();
-
-    // 3. Comida de HOY con arrastre automático
     final foodCalc = await _foodBudgetRepository.getDayCalculation(DateTime.now());
 
-    // 4. Deudas, Préstamos y Compras Planeadas
     final debtTotals = await _debtRepository.getTotalPendingDebtsByCurrency();
     final peopleTotals = await _peopleOwedRepository.getTotalOwedToMeByCurrency();
     final plannedTotals = await _plannedPurchaseRepository.getTotalEstimatedByCurrency();
 
-    // 5. Mes Seleccionado
     final monthlyTotals = await _transactionRepository.getMonthlyTotals(
       year: _selectedMonth.year,
       month: _selectedMonth.month,
     );
 
-    // 6. Últimas 5 operaciones
     final recent = await _transactionRepository.getRecent(limit: 5);
 
     if (!mounted) return;
@@ -333,6 +320,7 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         Row(
           children: [
+            // Tarjeta de Reservas
             Expanded(
               child: Card(
                 elevation: 0,
@@ -393,6 +381,8 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
             const SizedBox(width: 10),
+
+            // Tarjeta de Comida Hoy
             Expanded(
               child: Card(
                 elevation: 0,
@@ -456,7 +446,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         const SizedBox(height: 10),
 
-        // Tarjeta de Compromisos y Metas (Deudas, Préstamos y Compras)
+        // Tarjeta de Compromisos y por Comprar
         Card(
           elevation: 0,
           color: themeColors?.cardBaseBg,
@@ -490,7 +480,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Compromisos y Metas',
+                          'Compromisos y por Comprar', // 👈 Título actualizado
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -526,7 +516,7 @@ class _DashboardPageState extends State<DashboardPage> {
         Expanded(
           child: _ActionBtn(
             label: 'Gasto',
-            icon: Icons.arrow_upward,
+            icon: Icons.trending_down,
             themeColors: themeColors,
             onTap: () => _openCreateTransaction('expense'),
           ),
@@ -535,7 +525,7 @@ class _DashboardPageState extends State<DashboardPage> {
         Expanded(
           child: _ActionBtn(
             label: 'Ingreso',
-            icon: Icons.arrow_downward,
+            icon: Icons.trending_up,
             themeColors: themeColors,
             onTap: () => _openCreateTransaction('income'),
           ),
@@ -742,7 +732,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
         switch (type) {
           case 'income':
-            iconData = Icons.arrow_downward;
+            iconData = Icons.trending_up;
             typeLabel = 'Ingreso';
             break;
           case 'transfer':
@@ -750,11 +740,12 @@ class _DashboardPageState extends State<DashboardPage> {
             typeLabel = 'Transferencia';
             break;
           case 'debt_payment':
+          case 'debtPayment':
             iconData = Icons.handshake_outlined;
             typeLabel = 'Pago deuda';
             break;
           default:
-            iconData = Icons.arrow_upward;
+            iconData = Icons.trending_down;
             typeLabel = 'Gasto';
         }
 

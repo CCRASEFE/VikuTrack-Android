@@ -48,9 +48,9 @@ class _AccountsPageState extends State<AccountsPage> {
           currency: account.currency,
           type: account.type,
           initialBalance: balanceDetails['initial']!,
-          totalIn: balanceDetails['in']!,
-          totalOut: balanceDetails['out']!,
-          currentBalance: balanceDetails['current']!,
+          totalBalance: balanceDetails['total']!,
+          reservedBalance: balanceDetails['reserved']!,
+          freeBalance: balanceDetails['free']!,
           paymentMethods: methods
               .map((method) => method['name'] as String)
               .toList(),
@@ -204,9 +204,9 @@ class _AccountsPageState extends State<AccountsPage> {
 
     for (final acc in _accounts) {
       if (acc.currency == 'PEN') {
-        totalPEN += acc.currentBalance;
+        totalPEN += acc.totalBalance;
       } else if (acc.currency == 'USD') {
-        totalUSD += acc.currentBalance;
+        totalUSD += acc.totalBalance;
       }
     }
 
@@ -391,7 +391,6 @@ class _AccountsPageState extends State<AccountsPage> {
                             children: [
                               Row(
                                 children: [
-                                  // Círculo de icono con estilo de píldora oficial
                                   Container(
                                     width: 42,
                                     height: 42,
@@ -462,15 +461,15 @@ class _AccountsPageState extends State<AccountsPage> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Saldo Actual Disponible',
+                                        'Saldo Total en Cuenta',
                                         style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                                       ),
                                       Text(
-                                        _formatAmount(account.currentBalance, account.currency),
+                                        _formatAmount(account.totalBalance, account.currency),
                                         style: TextStyle(
                                           fontSize: 24,
                                           fontWeight: FontWeight.w800,
-                                          color: account.currentBalance >= 0
+                                          color: account.totalBalance >= 0
                                               ? (themeColors?.cardBaseText ?? colorScheme.onSurface)
                                               : colorScheme.error,
                                         ),
@@ -482,36 +481,91 @@ class _AccountsPageState extends State<AccountsPage> {
                               ),
                               const SizedBox(height: 12),
                               Divider(height: 1, color: themeColors?.cardBaseBorder ?? Colors.white12),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 10),
+
+                              // Fila elástica de 3 columnas (Inicial, Reservado, Dinero disponible)
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    'Inicial: ${_formatAmount(account.initialBalance, account.currency)}',
-                                    style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
-                                  ),
-                                  // Entradas en el Oro Oficial de la paleta
-                                  Text(
-                                    'Entradas: +${_formatAmount(account.totalIn, account.currency)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: themeColors?.cardAccentText ?? Colors.green,
-                                      fontWeight: FontWeight.w600,
+                                  // Columna 1: Inicial
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Inicial',
+                                          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                        ),
+                                        const SizedBox(height: 1),
+                                        Text(
+                                          _formatAmount(account.initialBalance, account.currency),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  // Salidas en color plata/atenuado
-                                  Text(
-                                    'Salidas: -${_formatAmount(account.totalOut, account.currency)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600,
+
+                                  // Columna 2: Reservado
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Reservado',
+                                          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                        ),
+                                        const SizedBox(height: 1),
+                                        Text(
+                                          _formatAmount(account.reservedBalance, account.currency),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: account.reservedBalance > 0
+                                                ? (themeColors?.cardAccentText ?? Colors.amber)
+                                                : colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Columna 3: Dinero disponible (Libre)
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          'Disponible',
+                                          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                        ),
+                                        const SizedBox(height: 1),
+                                        Text(
+                                          _formatAmount(account.freeBalance, account.currency),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            color: account.freeBalance >= 0
+                                                ? (themeColors?.cardAccentText ?? Colors.green)
+                                                : colorScheme.error,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
+
                               if (account.paymentMethods.isNotEmpty) ...[
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 12),
                                 Wrap(
                                   spacing: 6,
                                   runSpacing: 4,
@@ -632,6 +686,7 @@ class _CreateAccountDialogState extends State<_CreateAccountDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _currency,
               decoration: const InputDecoration(
                 labelText: 'Moneda',
@@ -652,6 +707,7 @@ class _CreateAccountDialogState extends State<_CreateAccountDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _type,
               decoration: const InputDecoration(
                 labelText: 'Tipo',
@@ -799,6 +855,7 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _currency,
               decoration: const InputDecoration(
                 labelText: 'Moneda',
@@ -819,6 +876,7 @@ class _EditAccountDialogState extends State<_EditAccountDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _type,
               decoration: const InputDecoration(
                 labelText: 'Tipo',
@@ -876,9 +934,9 @@ class _AccountView {
   final String currency;
   final String type;
   final int initialBalance;
-  final int totalIn;
-  final int totalOut;
-  final int currentBalance;
+  final int totalBalance;
+  final int reservedBalance;
+  final int freeBalance;
   final List<String> paymentMethods;
 
   const _AccountView({
@@ -887,9 +945,9 @@ class _AccountView {
     required this.currency,
     required this.type,
     required this.initialBalance,
-    required this.totalIn,
-    required this.totalOut,
-    required this.currentBalance,
+    required this.totalBalance,
+    required this.reservedBalance,
+    required this.freeBalance,
     required this.paymentMethods,
   });
 }
